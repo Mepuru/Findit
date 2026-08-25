@@ -115,13 +115,13 @@ pub fn apply_create(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Qu
 pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<ModifyResult> {
     let query = required(intent.target_query.as_deref(), "目标物品描述")?;
 
-    let has_box_change = intent.new_box_name.is_some();
+    let has_box_change = intent.new_box_name.is_some() || intent.new_unit_name.is_some();
     let has_field_change = intent.new_item_name.is_some()
         || intent.new_description.is_some()
         || intent.new_quantity.is_some();
     if !has_box_change && !has_field_change {
         return Err(FinditError::Validation(
-            "没有有效的变更字段，请至少指定新箱/新名称/新数量/新备注之一".to_string(),
+            "没有有效的变更字段，请至少指定新箱/新单元/新名称/新数量/新备注之一".to_string(),
         ));
     }
 
@@ -145,6 +145,21 @@ pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Mo
             None => unit_of_box(&tx, target.item.box_id)?,
         };
         let box_ref = ensure_box(&tx, unit_id, &box_name)?;
+        if box_ref.id != target.item.box_id {
+            items::update_item(&tx, target.item.id, None, None, None, Some(box_ref.id), None)?;
+            changes.push(format!("移动到「{}」", box_ref.name));
+        }
+        box_out = Some(box_ref);
+    } else if let Some(unit_name) = &intent.new_unit_name {
+        // 仅换单元：把物品移入目标单元下与其当前所在箱同名的箱，
+        // 找不到时在目标单元下创建同名箱。
+        let unit_id = find_or_create_unit(&tx, unit_name)?.id;
+        let current_box_name: String = tx.query_row(
+            "SELECT name FROM storage_boxes WHERE id = ?1",
+            params![target.item.box_id],
+            |row| row.get(0),
+        )?;
+        let box_ref = ensure_box_in_unit(&tx, unit_id, &current_box_name)?;
         if box_ref.id != target.item.box_id {
             items::update_item(&tx, target.item.id, None, None, None, Some(box_ref.id), None)?;
             changes.push(format!("移动到「{}」", box_ref.name));
@@ -273,6 +288,26 @@ fn unit_of_box(conn: &Connection, box_id: i64) -> FinditResult<i64> {
         }),
         Err(e) => Err(e.into()),
     }
+}
+
+/// 只在目标单元下找同名箱；找不到时在该单元下新建（不回退其它单元的同名箱）。
+fn ensure_box_in_unit(conn: &Connection, unit_id: i64, name: &str) -> FinditResult<EntityRef> {
+    if let Some((box_id, _)) = boxes_with_name(conn, name)?
+        .into_iter()
+        .find(|(_, uid)| *uid == unit_id)
+    {
+        return Ok(EntityRef {
+            id: box_id,
+            name: name.trim().to_string(),
+            created: false,
+        });
+    }
+    let box_ = boxes::create_box(conn, unit_id, name, "")?;
+    Ok(EntityRef {
+        id: box_.id,
+        name: box_.name,
+        created: true,
+    })
 }
 
 /// 按名称找箱：优先目标单元下的同名箱 → 任意同名箱 → 在目标单元新建。
@@ -583,6 +618,52 @@ mod tests {
             apply_modify(&conn, &intent),
             Err(FinditError::Validation(_))
         ));
+    }
+
+    #[test]
+    fn modify_unit_only_reuses_same_name_box_in_target_unit() {
+        let conn = setup();
+        let (_unit_id, item_id) = fixture_for_modify(&conn); // 车库/工具箱/扳手
+        // 目标单元「厨房」下已有同名箱「工具箱」。
+        let kitchen = units::create_unit(&conn, "厨房", "").unwrap();
+        let target_box = boxes::create_box(&conn, kitchen.id, "工具箱", "").unwrap();
+
+        let mut intent = ParsedIntent::new_modify();
+        intent.target_query = Some("扳手".to_string());
+        intent.new_unit_name = Some("厨房".to_string());
+        let result = apply_modify(&conn, &intent).unwrap();
+
+        assert_eq!(result.item.id, item_id);
+        assert_eq!(result.item.box_id, target_box.id);
+        assert!(!result.moved_box.as_ref().unwrap().created);
+        assert_eq!(result.changes.len(), 1);
+        assert_eq!(count(&conn, "storage_boxes"), 2); // 复用而非新建
+    }
+
+    #[test]
+    fn modify_unit_only_creates_same_name_box_in_target_unit() {
+        let conn = setup();
+        let (_unit_id, item_id) = fixture_for_modify(&conn);
+        let balcony = units::create_unit(&conn, "阳台", "").unwrap();
+
+        let mut intent = ParsedIntent::new_modify();
+        intent.target_query = Some("扳手".to_string());
+        intent.new_unit_name = Some("阳台".to_string());
+        let result = apply_modify(&conn, &intent).unwrap();
+
+        let box_ref = result.moved_box.unwrap();
+        assert!(box_ref.created);
+        assert_eq!(box_ref.name, "工具箱"); // 与物品原所在箱同名
+        assert_eq!(result.item.box_id, box_ref.id);
+        let uid: i64 = conn
+            .query_row(
+                "SELECT unit_id FROM storage_boxes WHERE id = ?1",
+                params![box_ref.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(uid, balcony.id);
+        assert_eq!(count(&conn, "storage_units"), 2);
     }
 
     #[test]
