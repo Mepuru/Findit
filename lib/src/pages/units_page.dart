@@ -6,6 +6,7 @@ import '../errors.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 import 'boxes_page.dart';
+import 'scan_page.dart';
 
 /// 第一级：存储单元列表。
 class UnitsPage extends StatefulWidget {
@@ -95,6 +96,11 @@ class _UnitsPageState extends State<UnitsPage> {
     showErrorSnack(context, '$feature功能将在后续版本上线，敬请期待。');
   }
 
+  Future<void> _openScan() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const ScanPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,7 +129,7 @@ class _UnitsPageState extends State<UnitsPage> {
           IconButton(
             tooltip: '扫码',
             icon: const Icon(Icons.qr_code_scanner_rounded),
-            onPressed: () => _showPlaceholder('扫码'),
+            onPressed: _openScan,
           ),
           const SizedBox(width: 4),
         ],

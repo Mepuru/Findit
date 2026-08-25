@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 扫码识别需要相机权限（mobile_scanner）。 -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="findit"
         android:name="${applicationName}"

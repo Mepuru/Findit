@@ -5,6 +5,7 @@ import 'package:findit/src/rust/api/units.dart' as units_api;
 
 import '../errors.dart';
 import '../theme.dart';
+import '../widgets/box_qr_sheet.dart';
 import '../widgets/common.dart';
 import 'items_page.dart';
 
@@ -157,6 +158,7 @@ class _BoxesPageState extends State<BoxesPage> {
             itemBuilder: (context, index) => _BoxCard(
               box: boxes[index],
               onTap: () => _openItems(boxes[index]),
+              onQr: () => showBoxQrSheet(context, box: boxes[index]),
               onEdit: () => _openEditSheet(boxes[index]),
               onDelete: () => _delete(boxes[index]),
             ),
@@ -171,12 +173,14 @@ class _BoxCard extends StatelessWidget {
   const _BoxCard({
     required this.box,
     required this.onTap,
+    required this.onQr,
     required this.onEdit,
     required this.onDelete,
   });
 
   final StorageBox box;
   final VoidCallback onTap;
+  final VoidCallback onQr;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
@@ -227,10 +231,12 @@ class _BoxCard extends StatelessWidget {
               PopupMenuButton<String>(
                 tooltip: '更多操作',
                 onSelected: (value) {
+                  if (value == 'qr') onQr();
                   if (value == 'edit') onEdit();
                   if (value == 'delete') onDelete();
                 },
                 itemBuilder: (context) => const [
+                  PopupMenuItem(value: 'qr', child: Text('二维码标签')),
                   PopupMenuItem(value: 'edit', child: Text('编辑')),
                   PopupMenuItem(
                     value: 'delete',
