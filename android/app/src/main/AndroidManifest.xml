@@ -1,10 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 扫码识别需要相机权限（mobile_scanner）。 -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- AI 服务调用（局域网 Ollama / OpenAI 兼容接口）需要网络权限。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 语音输入需要麦克风权限（speech_to_text）。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="Findit"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"
