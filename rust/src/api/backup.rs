@@ -16,6 +16,10 @@ use crate::frb_generated::StreamSink;
 
 /// 导出备份到 `target_path`（zip）。进度阶段：`snapshot` / `photos` /
 /// `finalize`，最后一条 `done` 事件携带 [`BackupSummary`]。
+///
+/// 锁边界：`with_conn` 内只做 `wal_checkpoint` + `VACUUM INTO` 快照 +
+/// 三表计数（+ 快照库内剔除 API Key），随即释放锁；照片打包与
+/// manifest 写入在无锁环境进行（快照文件已是一致性副本）。
 pub fn export_backup(
     target_path: String,
     sink: StreamSink<BackupProgress>,
@@ -26,21 +30,27 @@ pub fn export_backup(
     }
     let dir = crate::core::db::db_dir()?;
 
-    let stats = with_conn(|conn| {
-        crate::core::backup::export::export_backup(
-            conn,
-            &dir,
-            Path::new(&target_path),
-            Some(&|stage, done, total| {
-                let _ = sink.add(BackupProgress {
-                    stage: stage.to_string(),
-                    done,
-                    total,
-                    summary: None,
-                });
-            }),
-        )
-    })?;
+    let progress = |stage: &str, done: i32, total: i32| {
+        let _ = sink.add(BackupProgress {
+            stage: stage.to_string(),
+            done,
+            total,
+            summary: None,
+        });
+    };
+
+    // 第一段（锁内）：快照 + 计数，随即释放锁。
+    progress("snapshot", 0, 1);
+    let snapshot = with_conn(crate::core::backup::export::create_snapshot)?;
+    progress("snapshot", 1, 1);
+
+    // 第二段（锁外）：照片打包与 manifest 写入（可能耗时很长）。
+    let stats = crate::core::backup::export::package_backup(
+        snapshot,
+        &dir,
+        Path::new(&target_path),
+        Some(&progress),
+    )?;
 
     let summary = BackupSummary {
         items_count: stats.items_count,

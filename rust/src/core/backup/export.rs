@@ -3,16 +3,21 @@
 //! 防 WAL 丢数据：先 `PRAGMA wal_checkpoint(TRUNCATE)`，再 `VACUUM INTO`
 //! 生成一致性快照文件打进 zip（不影响在线读写）。
 //! 全程流式：固定 64KB 缓冲，内存占用恒定。
+//!
+//! 锁边界：[`create_snapshot`]（checkpoint + 计数 + VACUUM INTO + 剔除密钥）
+//! 是需要数据库连接的全部工作；照片打包与 manifest 写入由
+//! [`package_backup`] 在无锁环境完成（快照文件已是一致性副本）。
 
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use uuid::Uuid;
 use zip::write::{SimpleFileOptions, ZipWriter};
 use zip::CompressionMethod;
 
+use crate::core::ai::config::KEY_API_KEY;
 use crate::core::backup::{
     DB_ENTRY_NAME, FORMAT_VERSION, MANIFEST_ENTRY_NAME, PHOTOS_ENTRY_PREFIX, STREAM_BUF_SIZE,
 };
@@ -32,10 +37,103 @@ pub struct ExportStats {
     pub total_bytes: i64,
 }
 
-/// 导出备份到 `target_path`（zip）。
+/// 数据库一致性快照（需要连接的全部工作已完成，后续打包无需持锁）。
+#[derive(Debug)]
+pub struct Snapshot {
+    /// 快照文件路径（`VACUUM INTO` 产物，打包后由 [`package_backup`] 清理）。
+    pub path: PathBuf,
+    pub items_count: i64,
+    pub boxes_count: i64,
+    pub units_count: i64,
+}
+
+/// 生成一致性快照（需要数据库连接，应在持锁范围内完成）：
 ///
-/// `on_progress(stage, done, total)`：stage ∈ `snapshot` / `photos` / `finalize`。
-/// 中途失败时尽力清理临时快照与残缺的目标文件。
+/// 1. `wal_checkpoint(TRUNCATE)` 把 WAL 数据落盘，避免快照遗漏最近写入；
+/// 2. 统计三表计数（写入 manifest）；
+/// 3. `VACUUM INTO` 生成一致性副本（不阻塞在线读写）；
+/// 4. 在快照副本上剔除 AI API Key（密钥不随备份分发）。
+pub fn create_snapshot(conn: &Connection) -> FinditResult<Snapshot> {
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
+    let (items_count, boxes_count, units_count) = count_rows(conn)?;
+
+    let path = std::env::temp_dir().join(format!("findit-snapshot-{}.db", Uuid::new_v4()));
+    conn.execute(
+        "VACUUM INTO ?1",
+        [path.to_string_lossy().as_ref()],
+    )?;
+
+    // 剔除密钥：快照已是独立文件，直接打开副本清理，不影响在线库。
+    if let Err(e) = scrub_api_key(&path) {
+        let _ = std::fs::remove_file(&path);
+        return Err(e);
+    }
+
+    Ok(Snapshot {
+        path,
+        items_count,
+        boxes_count,
+        units_count,
+    })
+}
+
+/// 把快照库中的 AI API Key 置空，避免密钥随备份分发。
+fn scrub_api_key(snapshot_path: &Path) -> FinditResult<()> {
+    let conn = Connection::open(snapshot_path)
+        .map_err(|e| FinditError::Io(format!("无法打开快照库：{e}")))?;
+    conn.execute(
+        "UPDATE app_settings SET value = '' WHERE key = ?1",
+        params![KEY_API_KEY],
+    )?;
+    Ok(())
+}
+
+/// 把快照与照片打包为备份 zip（无需数据库连接，可在锁外执行）。
+///
+/// `on_progress(stage, done, total)`：stage ∈ `photos` / `finalize`
+/// （`snapshot` 阶段已在 [`create_snapshot`] 完成）。
+/// 无论成败都会删除快照文件；失败时顺带删除残缺的目标文件。
+pub fn package_backup(
+    snapshot: Snapshot,
+    db_dir: &Path,
+    target_path: &Path,
+    on_progress: Option<&dyn Fn(&str, i32, i32)>,
+) -> FinditResult<ExportStats> {
+    // 收集照片文件（排序保证条目顺序稳定）。
+    let photos = list_photo_files(&db_dir.join(PHOTOS_DIR_NAME))?;
+
+    let counts = (
+        snapshot.items_count,
+        snapshot.boxes_count,
+        snapshot.units_count,
+    );
+    let result = write_zip(&snapshot.path, &photos, target_path, counts, |stage, done, total| {
+        if let Some(f) = on_progress {
+            f(stage, done, total);
+        }
+    });
+
+    // 无论成败都清理快照；失败时顺带删除残缺的目标文件。
+    let _ = std::fs::remove_file(&snapshot.path);
+    match result {
+        Ok(stats) => Ok(ExportStats {
+            items_count: snapshot.items_count,
+            boxes_count: snapshot.boxes_count,
+            units_count: snapshot.units_count,
+            photos_count: photos.len() as i32,
+            total_bytes: stats,
+        }),
+        Err(e) => {
+            let _ = std::fs::remove_file(target_path);
+            Err(e)
+        }
+    }
+}
+
+/// 导出备份到 `target_path`（zip）：[`create_snapshot`] + [`package_backup`]。
+///
+/// 仅供需要一步到位的场景（如测试）；API 层应分两步调用，
+/// 以便在两段之间释放全局数据库锁。
 pub fn export_backup(
     conn: &Connection,
     db_dir: &Path,
@@ -45,50 +143,11 @@ pub fn export_backup(
     if let Some(f) = on_progress {
         f("snapshot", 0, 1);
     }
-
-    // 1. WAL 数据落盘，避免快照遗漏最近写入。
-    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
-
-    // 2. 统计计数（写入 manifest）。
-    let (items_count, boxes_count, units_count) = count_rows(conn)?;
-
-    // 3. VACUUM INTO 生成一致性快照（不阻塞在线读写）。
-    let snapshot = std::env::temp_dir().join(format!("findit-snapshot-{}.db", Uuid::new_v4()));
-    conn.execute(
-        "VACUUM INTO ?1",
-        [snapshot.to_string_lossy().as_ref()],
-    )?;
-
-    // 4. 收集照片文件（排序保证条目顺序稳定）。
-    let photos = list_photo_files(&db_dir.join(PHOTOS_DIR_NAME))?;
-
-    let result = write_zip(
-        &snapshot,
-        &photos,
-        target_path,
-        (items_count, boxes_count, units_count),
-        |stage, done, total| {
-            if let Some(f) = on_progress {
-                f(stage, done, total);
-            }
-        },
-    );
-
-    // 无论成败都清理快照；失败时顺带删除残缺的目标文件。
-    let _ = std::fs::remove_file(&snapshot);
-    match result {
-        Ok(stats) => Ok(ExportStats {
-            items_count,
-            boxes_count,
-            units_count,
-            photos_count: photos.len() as i32,
-            total_bytes: stats,
-        }),
-        Err(e) => {
-            let _ = std::fs::remove_file(target_path);
-            Err(e)
-        }
+    let snapshot = create_snapshot(conn)?;
+    if let Some(f) = on_progress {
+        f("snapshot", 1, 1);
     }
+    package_backup(snapshot, db_dir, target_path, on_progress)
 }
 
 fn count_rows(conn: &Connection) -> FinditResult<(i64, i64, i64)> {
