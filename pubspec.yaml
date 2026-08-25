@@ -44,6 +44,8 @@ dependencies:
   qr_flutter: ^4.1.0
   share_plus: ^13.3.0
   mobile_scanner: ^7.4.0
+  # 备份文件的保存/选择（SAF）。
+  file_picker: ^12.0.0
 
 dev_dependencies:
   flutter_test:

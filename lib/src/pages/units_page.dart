@@ -5,11 +5,11 @@ import 'package:findit/src/rust/api/units.dart' as api;
 import '../errors.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
-import 'ai_settings_page.dart';
 import 'boxes_page.dart';
 import 'quick_add_page.dart';
 import 'scan_page.dart';
 import 'search_page.dart';
+import 'settings_page.dart';
 
 /// 第一级：存储单元列表。
 class UnitsPage extends StatefulWidget {
@@ -111,9 +111,11 @@ class _UnitsPageState extends State<UnitsPage> {
         .then((_) => _reload());
   }
 
-  Future<void> _openAiSettings() async {
+  Future<void> _openSettings() async {
+    // 设置页可能执行了备份恢复，返回后刷新列表。
     await Navigator.of(context)
-        .push(MaterialPageRoute(builder: (_) => const AiSettingsPage()));
+        .push(MaterialPageRoute(builder: (_) => const SettingsPage()))
+        .then((_) => _reload());
   }
 
   @override
@@ -152,9 +154,9 @@ class _UnitsPageState extends State<UnitsPage> {
             onPressed: _openScan,
           ),
           IconButton(
-            tooltip: 'AI 设置',
+            tooltip: '设置',
             icon: const Icon(Icons.tune_rounded),
-            onPressed: _openAiSettings,
+            onPressed: _openSettings,
           ),
           const SizedBox(width: 4),
         ],
