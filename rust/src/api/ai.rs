@@ -1,7 +1,8 @@
 //! AI API 薄壳：配置、探活、一句话解析与应用、查询向量、回填与重建。
 //!
-//! 所有业务逻辑在 `core::ai`；本层只做转发 + 全局状态编排
-//! （数据库锁按批次短持有，网络调用不持锁）。
+//! 所有业务逻辑在 `core::ai`；本层只做转发 + 全局状态编排。
+//! 锁边界铁律：网络调用（`transport.embed`）绝不发生在 `with_conn`
+//! 持锁闭包内——回填按「锁内取一批待办 → 释放锁做网络 → 锁内写回」三段执行。
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -13,8 +14,8 @@ use crate::core::ai::apply::{apply_create, apply_modify, ModifyResult, QuickAddR
 use crate::core::ai::client::{ai_error_to_findit, AiError, AiTransport, HttpAiTransport};
 use crate::core::ai::config::{load_ai_config, AiConfig, KEY_EMBEDDED_DIM, KEY_EMBEDDED_MODEL};
 use crate::core::ai::embed::{
-    backfill_round, clear_all_embeddings, count_items, count_pending_embeddings,
-    DEFAULT_BATCH_SIZE,
+    apply_backfill, clear_all_embeddings, count_items, count_pending_embeddings,
+    pending_item_texts, DEFAULT_BATCH_SIZE,
 };
 use crate::core::ai::parse::{parse_intent_from_output, ParsedIntent, PARSE_SYSTEM_PROMPT};
 use crate::core::db::with_conn;
@@ -23,8 +24,8 @@ use crate::core::repo::settings::get_setting;
 
 /// 探活结果缓存有效期：`get_ai_status` 不每次重探。
 const TEST_CACHE_TTL: Duration = Duration::from_secs(60);
-/// 搜索查询向量的快速超时（失败即降级为关键词搜索）。
-const QUERY_EMBED_TIMEOUT: Duration = Duration::from_secs(10);
+/// 搜索查询向量的短超时：失败即降级为关键词搜索，不阻塞搜索结果呈现。
+const QUERY_EMBED_TIMEOUT: Duration = Duration::from_secs(3);
 
 static LAST_TEST: Mutex<Option<(Instant, AiTestResult)>> = Mutex::new(None);
 
@@ -207,8 +208,11 @@ pub async fn generate_query_embedding(text: String) -> Result<Option<Vec<f32>>, 
 }
 
 /// 补齐待处理向量：扫描 `embedding IS NULL` 的物品，分批写入。
-/// 返回本次处理条数。网络按批调用，数据库锁仅短持有；
-/// 中断后重跑即可继续（以数据库为待办源）。
+/// 返回本次处理条数。
+///
+/// 每轮三段式：锁内取一批待处理文本 → 释放锁后做网络调用 →
+/// 锁内写回（写回前重查维度一致性）。网络期间全局锁不持有，
+/// 不会冻结其它数据库操作；中断后重跑即可继续（以数据库为待办源）。
 pub async fn backfill_pending_embeddings() -> Result<i32, FinditError> {
     let config = with_conn(load_ai_config)?;
     if !config.is_configured() {
@@ -222,7 +226,7 @@ pub async fn backfill_pending_embeddings() -> Result<i32, FinditError> {
 
     let mut processed = 0i32;
     for _ in 0..max_rounds {
-        let n = with_conn(|conn| backfill_round(conn, &transport, &config, DEFAULT_BATCH_SIZE))?;
+        let n = backfill_one_round(&transport, &config)?;
         if n == 0 {
             break;
         }
@@ -231,8 +235,29 @@ pub async fn backfill_pending_embeddings() -> Result<i32, FinditError> {
     Ok(processed)
 }
 
+/// 单轮三段式回填，返回本轮写入条数（0 = 已无待处理）。
+///
+/// 网络调用位于两段 `with_conn` 之间，绝不持锁。
+fn backfill_one_round(transport: &HttpAiTransport, config: &AiConfig) -> Result<i32, FinditError> {
+    // 第一段（锁内）：取一批待处理文本，随即释放锁。
+    let pending = with_conn(|conn| pending_item_texts(conn, DEFAULT_BATCH_SIZE))?;
+    if pending.is_empty() {
+        return Ok(0);
+    }
+
+    // 第二段（锁外）：网络调用。
+    let texts: Vec<String> = pending.iter().map(|(_, t)| t.clone()).collect();
+    let vecs = transport
+        .embed(config, &texts)
+        .map_err(ai_error_to_findit)?;
+
+    // 第三段（锁内）：写回（内部重查维度一致性）。
+    with_conn(|conn| apply_backfill(conn, &pending, vecs, &config.embed_model))
+}
+
 /// 重建全部向量：清空后经 [`StreamSink`] 流式推送进度（done/total）。
 /// Dart 端监听流；函数最终返回处理汇总。
+/// 与 [`backfill_pending_embeddings`] 同样按三段式执行，网络调用不持锁。
 pub fn rebuild_embeddings(sink: StreamSink<EmbedProgress>) -> Result<EmbedProgressSummary, FinditError> {
     let config = with_conn(load_ai_config)?;
     if !config.is_configured() {
@@ -252,7 +277,7 @@ pub fn rebuild_embeddings(sink: StreamSink<EmbedProgress>) -> Result<EmbedProgre
     let max_rounds = (total as usize) / DEFAULT_BATCH_SIZE + 4;
     let mut processed = 0i32;
     for _ in 0..max_rounds {
-        let n = with_conn(|conn| backfill_round(conn, &transport, &config, DEFAULT_BATCH_SIZE))?;
+        let n = backfill_one_round(&transport, &config)?;
         if n == 0 {
             break;
         }

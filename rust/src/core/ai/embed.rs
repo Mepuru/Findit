@@ -1,9 +1,10 @@
 //! Embedding 生成与回填的纯逻辑：
 //! 物品文本拼接、待处理扫描、批量写入、维度变更清空重建。
 //!
-//! 网络调用由 [`AiTransport`] 抽象注入（测试用 mock）；
-//! 编排以「单轮回填」[`backfill_round`] 为单位，天然可恢复——
-//! 待办以数据库 `embedding IS NULL` 为准，中断后重跑即可。
+//! 网络调用由 [`AiTransport`] 抽象注入（测试用 mock），且必须发生在全局数据库锁之外：
+//! 回填拆为「锁内取一批待办（[`pending_item_texts`]）→ 锁外网络调用 →
+//! 锁内写回（[`apply_backfill`]）」三段，待办以数据库 `embedding IS NULL`
+//! 为准，中断后重跑即可继续。
 
 use rusqlite::{params, Connection};
 
@@ -138,28 +139,22 @@ pub fn ensure_dim_consistent(
     Ok(mismatch)
 }
 
-/// 单轮回填：取一批待处理物品 → 调向量服务 → 维度检查 → 写库。
+/// 写回一批向量（三段式回填的第三段，锁内执行）：
+/// 校验响应数量/空向量 → 维度一致性检查 → 写入数据库。
 ///
-/// 返回本轮写入条数；为 0 表示已无待处理。网络失败直接返回错误，
-/// 已写入的批次保留（可恢复，重跑即可）。
-pub fn backfill_round(
+/// `pending` 为第一段取到的 (item_id, 文本)，`vecs` 为锁外网络调用的结果。
+/// 写回前重新检查维度一致性（锁释放期间模型配置可能已变更）。
+/// 返回写入条数。
+pub fn apply_backfill(
     conn: &Connection,
-    transport: &dyn AiTransport,
-    config: &AiConfig,
-    batch_size: usize,
+    pending: &[(i64, String)],
+    vecs: Vec<Vec<f32>>,
+    embed_model: &str,
 ) -> FinditResult<i32> {
-    let pending = pending_item_texts(conn, batch_size)?;
-    if pending.is_empty() {
-        return Ok(0);
-    }
-    let texts: Vec<String> = pending.iter().map(|(_, t)| t.clone()).collect();
-    let vecs = transport
-        .embed(config, &texts)
-        .map_err(crate::core::ai::client::ai_error_to_findit)?;
-    if vecs.len() != texts.len() {
+    if vecs.len() != pending.len() {
         return Err(FinditError::AiModelOutput(format!(
             "向量数量不符：请求 {} 条，返回 {} 条",
-            texts.len(),
+            pending.len(),
             vecs.len()
         )));
     }
@@ -167,13 +162,9 @@ pub fn backfill_round(
         if first.is_empty() {
             return Err(FinditError::AiModelOutput("返回了空向量".to_string()));
         }
-        ensure_dim_consistent(conn, first.len(), &config.embed_model)?;
+        ensure_dim_consistent(conn, first.len(), embed_model)?;
     }
-    let pairs: Vec<(i64, Vec<f32>)> = pending
-        .iter()
-        .map(|(id, _)| *id)
-        .zip(vecs)
-        .collect();
+    let pairs: Vec<(i64, Vec<f32>)> = pending.iter().map(|(id, _)| *id).zip(vecs).collect();
     let written = write_item_embeddings(conn, &pairs)?;
     Ok(written as i32)
 }
@@ -351,19 +342,37 @@ mod tests {
         );
     }
 
-    // ---------- 回填编排 ----------
+    // ---------- 回填编排（三段式：取待办 → 网络 → 写回） ----------
+
+    /// 组合三段模拟一轮回填：锁内取待办 → mock 网络（锁外）→ 锁内写回。
+    fn round(
+        conn: &Connection,
+        transport: &MockTransport,
+        config: &AiConfig,
+        batch_size: usize,
+    ) -> FinditResult<i32> {
+        let pending = pending_item_texts(conn, batch_size)?;
+        if pending.is_empty() {
+            return Ok(0);
+        }
+        let texts: Vec<String> = pending.iter().map(|(_, t)| t.clone()).collect();
+        let vecs = transport
+            .embed(config, &texts)
+            .map_err(crate::core::ai::client::ai_error_to_findit)?;
+        apply_backfill(conn, &pending, vecs, &config.embed_model)
+    }
 
     #[test]
-    fn backfill_round_processes_batches_until_done() {
+    fn backfill_processes_batches_until_done() {
         let conn = setup();
         fixture_items(&conn, 5);
         let transport = MockTransport::new(4);
 
         // 批量 2 → 共 3 轮（2+2+1）
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 2);
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 2);
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 1);
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 0);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 2);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 2);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 1);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 0);
 
         assert_eq!(count_pending_embeddings(&conn).unwrap(), 0);
         assert_eq!(*transport.batches.borrow(), vec![2, 2, 1]);
@@ -383,15 +392,15 @@ mod tests {
         transport.push(Err(AiError::Network("boom".into())));
 
         // 第一轮成功写入 2 条
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 2);
-        // 第二轮网络失败：错误上抛，已写数据保留
-        let err = backfill_round(&conn, &transport, &config(), 2).unwrap_err();
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 2);
+        // 第二轮网络失败：错误上抛，已写数据保留（未进写回阶段）
+        let err = round(&conn, &transport, &config(), 2).unwrap_err();
         assert!(matches!(err, FinditError::AiUnreachable(_)));
         assert_eq!(count_pending_embeddings(&conn).unwrap(), 2);
 
         // 恢复后重跑：继续处理剩余 2 条
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 2);
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 0);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 2);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 0);
         assert_eq!(count_pending_embeddings(&conn).unwrap(), 0);
     }
 
@@ -403,11 +412,11 @@ mod tests {
         write_item_embeddings(&conn, &[(ids[0], vec![9.0, 9.0])]).unwrap();
         set_setting(&conn, KEY_EMBEDDED_DIM, "2").unwrap();
 
-        // 新模型输出 3 维 → 旧向量被清空，全部重建
+        // 新模型输出 3 维 → 旧向量被清空，全部重建（写回前重查维度）
         let transport = MockTransport::new(3);
         let mut total = 0;
         loop {
-            let n = backfill_round(&conn, &transport, &config(), 8).unwrap();
+            let n = round(&conn, &transport, &config(), 8).unwrap();
             if n == 0 {
                 break;
             }
@@ -428,21 +437,27 @@ mod tests {
     }
 
     #[test]
-    fn backfill_rejects_count_mismatch() {
+    fn apply_backfill_rejects_count_mismatch_and_empty() {
         let conn = setup();
         fixture_items(&conn, 2);
-        let transport = MockTransport::new(2);
-        transport.push(Ok(vec![vec![1.0, 1.0]])); // 请求 2 条只返回 1 条
-        let err = backfill_round(&conn, &transport, &config(), 2).unwrap_err();
+        let pending = pending_item_texts(&conn, 2).unwrap();
+
+        // 请求 2 条只返回 1 条 → 拒绝且不写库。
+        let err = apply_backfill(&conn, &pending, vec![vec![1.0, 1.0]], "m").unwrap_err();
+        assert!(matches!(err, FinditError::AiModelOutput(_)));
+        assert_eq!(count_pending_embeddings(&conn).unwrap(), 2);
+
+        // 空向量 → 拒绝。
+        let err = apply_backfill(&conn, &pending, vec![vec![], vec![1.0]], "m").unwrap_err();
         assert!(matches!(err, FinditError::AiModelOutput(_)));
         assert_eq!(count_pending_embeddings(&conn).unwrap(), 2);
     }
 
     #[test]
-    fn backfill_no_pending_returns_zero_without_network() {
+    fn no_pending_yields_zero_without_network() {
         let conn = setup();
         let transport = MockTransport::new(2);
-        assert_eq!(backfill_round(&conn, &transport, &config(), 2).unwrap(), 0);
+        assert_eq!(round(&conn, &transport, &config(), 2).unwrap(), 0);
         assert!(transport.batches.borrow().is_empty());
     }
 }
