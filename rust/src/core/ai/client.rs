@@ -294,7 +294,9 @@ impl HttpAiTransport {
             return Err(classify_http_error(status.as_u16(), &text));
         }
         serde_json::from_str(&text).map_err(|e| {
-            AiError::ModelOutput(format!("响应不是合法 JSON：{e}；原文前 120 字：{}", &text[..text.len().min(120)]))
+            // 按字符截取，避免在多字节字符中间切片导致 panic。
+            let snippet: String = text.chars().take(120).collect();
+            AiError::ModelOutput(format!("响应不是合法 JSON：{e}；原文前 120 字：{snippet}"))
         })
     }
 }
