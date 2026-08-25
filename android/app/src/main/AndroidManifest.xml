@@ -2,7 +2,7 @@
     <!-- 扫码识别需要相机权限（mobile_scanner）。 -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <application
-        android:label="findit"
+        android:label="Findit"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
