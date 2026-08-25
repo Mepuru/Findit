@@ -7,7 +7,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// 分类。
 class Category {
@@ -86,6 +86,85 @@ class Item {
           categories == other.categories &&
           createdAt == other.createdAt &&
           updatedAt == other.updatedAt;
+}
+
+/// 搜索命中方式。
+enum MatchedBy {
+  /// 语义向量命中，附带相似度百分比。
+  semantic,
+
+  /// 关键词命中。
+  keyword,
+}
+
+/// 一条搜索结果：物品完整信息 + 所在箱/单元名 + 命中方式。
+class SearchResult {
+  final PlatformInt64 id;
+  final String name;
+  final String description;
+  final PlatformInt64 quantity;
+
+  /// 照片相对路径；未上传照片时为 `None`。
+  final String? photoPath;
+  final PlatformInt64 boxId;
+
+  /// 物品所属分类名列表。
+  final List<String> categories;
+
+  /// 所在收纳箱名（便于结果定位）。
+  final String boxName;
+
+  /// 所在存储单元名（便于结果定位）。
+  final String unitName;
+  final MatchedBy matchedBy;
+
+  /// 语义命中时的相似度百分比（0-100）；关键词命中为 `None`。
+  final int? similarityPercent;
+
+  const SearchResult({
+    required this.id,
+    required this.name,
+    required this.description,
+    required this.quantity,
+    this.photoPath,
+    required this.boxId,
+    required this.categories,
+    required this.boxName,
+    required this.unitName,
+    required this.matchedBy,
+    this.similarityPercent,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      name.hashCode ^
+      description.hashCode ^
+      quantity.hashCode ^
+      photoPath.hashCode ^
+      boxId.hashCode ^
+      categories.hashCode ^
+      boxName.hashCode ^
+      unitName.hashCode ^
+      matchedBy.hashCode ^
+      similarityPercent.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is SearchResult &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          description == other.description &&
+          quantity == other.quantity &&
+          photoPath == other.photoPath &&
+          boxId == other.boxId &&
+          categories == other.categories &&
+          boxName == other.boxName &&
+          unitName == other.unitName &&
+          matchedBy == other.matchedBy &&
+          similarityPercent == other.similarityPercent;
 }
 
 /// 收纳箱（挂在某个存储单元下，`slug` 用于二维码）。
