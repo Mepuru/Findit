@@ -5,7 +5,9 @@ import 'package:findit/src/rust/api/units.dart' as api;
 import '../errors.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
+import 'ai_settings_page.dart';
 import 'boxes_page.dart';
+import 'quick_add_page.dart';
 import 'scan_page.dart';
 import 'search_page.dart';
 
@@ -103,6 +105,17 @@ class _UnitsPageState extends State<UnitsPage> {
         .push(MaterialPageRoute(builder: (_) => const SearchPage()));
   }
 
+  Future<void> _openQuickAdd() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const QuickAddPage()))
+        .then((_) => _reload());
+  }
+
+  Future<void> _openAiSettings() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AiSettingsPage()));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -129,9 +142,19 @@ class _UnitsPageState extends State<UnitsPage> {
             onPressed: _openSearch,
           ),
           IconButton(
+            tooltip: 'AI 快速录入',
+            icon: const Icon(Icons.auto_awesome_rounded),
+            onPressed: _openQuickAdd,
+          ),
+          IconButton(
             tooltip: '扫码',
             icon: const Icon(Icons.qr_code_scanner_rounded),
             onPressed: _openScan,
+          ),
+          IconButton(
+            tooltip: 'AI 设置',
+            icon: const Icon(Icons.tune_rounded),
+            onPressed: _openAiSettings,
           ),
           const SizedBox(width: 4),
         ],

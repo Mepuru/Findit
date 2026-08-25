@@ -11,6 +11,9 @@ String friendlyErrorMessage(Object error) {
       notFound: (entity, hint) => '找不到该$entity（$hint），可能已被删除。',
       validation: (detail) => detail,
       io: (detail) => '文件读写失败：$detail',
+      aiNotConfigured: (detail) => 'AI 未配置：$detail',
+      aiUnreachable: (detail) => '无法连接 AI 服务：$detail',
+      aiModelOutput: (detail) => 'AI 模型输出异常：$detail',
     );
   }
   return '出错了：$error';
