@@ -17,13 +17,36 @@ class AiConfig {
   final String chatModel;
   final String embedModel;
 
+  /// 向量服务独立配置；为空时回退对话服务对应字段。
+  final AiProvider embedProvider;
+  final String embedBaseUrl;
+  final String embedApiKey;
+
   const AiConfig({
     required this.provider,
     required this.baseUrl,
     required this.apiKey,
     required this.chatModel,
     required this.embedModel,
+    required this.embedProvider,
+    required this.embedBaseUrl,
+    required this.embedApiKey,
   });
+
+  /// 向量实际使用的 Provider（独立配置为空时回退对话 Provider）。
+  AiProvider get effectiveEmbedProvider =>
+      embedBaseUrl.trim().isEmpty ? provider : embedProvider;
+
+  /// 向量实际使用的服务地址。
+  String get effectiveEmbedBaseUrl =>
+      embedBaseUrl.trim().isEmpty ? baseUrl : embedBaseUrl;
+
+  /// 向量实际使用的 API Key。
+  String get effectiveEmbedApiKey =>
+      embedBaseUrl.trim().isEmpty ? apiKey : embedApiKey;
+
+  /// 向量服务是否独立配置。
+  bool get hasSeparateEmbedService => embedBaseUrl.trim().isNotEmpty;
 
   @override
   int get hashCode =>
@@ -31,7 +54,10 @@ class AiConfig {
       baseUrl.hashCode ^
       apiKey.hashCode ^
       chatModel.hashCode ^
-      embedModel.hashCode;
+      embedModel.hashCode ^
+      embedProvider.hashCode ^
+      embedBaseUrl.hashCode ^
+      embedApiKey.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -42,7 +68,10 @@ class AiConfig {
           baseUrl == other.baseUrl &&
           apiKey == other.apiKey &&
           chatModel == other.chatModel &&
-          embedModel == other.embedModel;
+          embedModel == other.embedModel &&
+          embedProvider == other.embedProvider &&
+          embedBaseUrl == other.embedBaseUrl &&
+          embedApiKey == other.embedApiKey;
 }
 
 /// 支持的 AI 服务提供方。

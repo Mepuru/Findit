@@ -1568,14 +1568,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AiConfig dco_decode_ai_config(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 5)
-      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
     return AiConfig(
       provider: dco_decode_ai_provider(arr[0]),
       baseUrl: dco_decode_String(arr[1]),
       apiKey: dco_decode_String(arr[2]),
       chatModel: dco_decode_String(arr[3]),
       embedModel: dco_decode_String(arr[4]),
+      embedProvider: dco_decode_ai_provider(arr[5]),
+      embedBaseUrl: dco_decode_String(arr[6]),
+      embedApiKey: dco_decode_String(arr[7]),
     );
   }
 
@@ -1589,20 +1592,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   AiStatus dco_decode_ai_status(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 11)
-      throw Exception('unexpected arr length: expect 11 but see ${arr.length}');
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
     return AiStatus(
       configured: dco_decode_bool(arr[0]),
       provider: dco_decode_ai_provider(arr[1]),
       baseUrl: dco_decode_String(arr[2]),
       chatModel: dco_decode_String(arr[3]),
       embedModel: dco_decode_String(arr[4]),
-      embeddedModel: dco_decode_opt_String(arr[5]),
-      embeddedDim: dco_decode_opt_box_autoadd_i_64(arr[6]),
-      pendingEmbeddings: dco_decode_i_64(arr[7]),
-      lastChatOk: dco_decode_opt_box_autoadd_bool(arr[8]),
-      lastEmbedOk: dco_decode_opt_box_autoadd_bool(arr[9]),
-      cacheAgeSecs: dco_decode_opt_box_autoadd_i_64(arr[10]),
+      embedProvider: dco_decode_ai_provider(arr[5]),
+      embedBaseUrl: dco_decode_String(arr[6]),
+      embeddedModel: dco_decode_opt_String(arr[7]),
+      embeddedDim: dco_decode_opt_box_autoadd_i_64(arr[8]),
+      pendingEmbeddings: dco_decode_i_64(arr[9]),
+      lastChatOk: dco_decode_opt_box_autoadd_bool(arr[10]),
+      lastEmbedOk: dco_decode_opt_box_autoadd_bool(arr[11]),
+      cacheAgeSecs: dco_decode_opt_box_autoadd_i_64(arr[12]),
     );
   }
 
@@ -2131,12 +2136,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_apiKey = sse_decode_String(deserializer);
     var var_chatModel = sse_decode_String(deserializer);
     var var_embedModel = sse_decode_String(deserializer);
+    var var_embedProvider = sse_decode_ai_provider(deserializer);
+    var var_embedBaseUrl = sse_decode_String(deserializer);
+    var var_embedApiKey = sse_decode_String(deserializer);
     return AiConfig(
       provider: var_provider,
       baseUrl: var_baseUrl,
       apiKey: var_apiKey,
       chatModel: var_chatModel,
       embedModel: var_embedModel,
+      embedProvider: var_embedProvider,
+      embedBaseUrl: var_embedBaseUrl,
+      embedApiKey: var_embedApiKey,
     );
   }
 
@@ -2155,6 +2166,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_baseUrl = sse_decode_String(deserializer);
     var var_chatModel = sse_decode_String(deserializer);
     var var_embedModel = sse_decode_String(deserializer);
+    var var_embedProvider = sse_decode_ai_provider(deserializer);
+    var var_embedBaseUrl = sse_decode_String(deserializer);
     var var_embeddedModel = sse_decode_opt_String(deserializer);
     var var_embeddedDim = sse_decode_opt_box_autoadd_i_64(deserializer);
     var var_pendingEmbeddings = sse_decode_i_64(deserializer);
@@ -2167,6 +2180,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       baseUrl: var_baseUrl,
       chatModel: var_chatModel,
       embedModel: var_embedModel,
+      embedProvider: var_embedProvider,
+      embedBaseUrl: var_embedBaseUrl,
       embeddedModel: var_embeddedModel,
       embeddedDim: var_embeddedDim,
       pendingEmbeddings: var_pendingEmbeddings,
@@ -2863,6 +2878,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.apiKey, serializer);
     sse_encode_String(self.chatModel, serializer);
     sse_encode_String(self.embedModel, serializer);
+    sse_encode_ai_provider(self.embedProvider, serializer);
+    sse_encode_String(self.embedBaseUrl, serializer);
+    sse_encode_String(self.embedApiKey, serializer);
   }
 
   @protected
@@ -2879,6 +2897,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.baseUrl, serializer);
     sse_encode_String(self.chatModel, serializer);
     sse_encode_String(self.embedModel, serializer);
+    sse_encode_ai_provider(self.embedProvider, serializer);
+    sse_encode_String(self.embedBaseUrl, serializer);
     sse_encode_opt_String(self.embeddedModel, serializer);
     sse_encode_opt_box_autoadd_i_64(self.embeddedDim, serializer);
     sse_encode_i_64(self.pendingEmbeddings, serializer);

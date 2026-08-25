@@ -226,6 +226,9 @@ mod tests {
             api_key: String::new(),
             chat_model: "chat-model".to_string(),
             embed_model: "embed-model".to_string(),
+            embed_provider: AiProvider::Ollama,
+            embed_base_url: String::new(),
+            embed_api_key: String::new(),
         }
     }
 

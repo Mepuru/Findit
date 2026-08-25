@@ -8,7 +8,7 @@ import 'package:findit/src/rust/core/ai/config.dart';
 import '../errors.dart';
 import '../theme.dart';
 
-/// AI 设置：服务配置、连接测试、语义向量的重建与补齐。
+/// AI 设置：对话模型、向量模型（支持独立服务配置）、语义向量的重建与补齐。
 class AiSettingsPage extends StatefulWidget {
   const AiSettingsPage({super.key});
 
@@ -17,12 +17,19 @@ class AiSettingsPage extends StatefulWidget {
 }
 
 class _AiSettingsPageState extends State<AiSettingsPage> {
+  // ── 对话模型 ──
   final _baseUrl = TextEditingController();
   final _apiKey = TextEditingController();
   final _chatModel = TextEditingController();
-  final _embedModel = TextEditingController();
-
   AiProvider _provider = AiProvider.ollama;
+
+  // ── 向量模型 ──
+  final _embedModel = TextEditingController();
+  final _embedBaseUrl = TextEditingController();
+  final _embedApiKey = TextEditingController();
+  AiProvider _embedProvider = AiProvider.ollama;
+  bool _useSameService = true;
+
   AiStatus? _status;
   AiTestResult? _testResult;
   bool _loading = true;
@@ -47,6 +54,8 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
     _apiKey.dispose();
     _chatModel.dispose();
     _embedModel.dispose();
+    _embedBaseUrl.dispose();
+    _embedApiKey.dispose();
     super.dispose();
   }
 
@@ -65,6 +74,10 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
         _apiKey.text = config.apiKey;
         _chatModel.text = config.chatModel;
         _embedModel.text = config.embedModel;
+        _useSameService = !config.hasSeparateEmbedService;
+        _embedProvider = config.embedProvider;
+        _embedBaseUrl.text = config.embedBaseUrl;
+        _embedApiKey.text = config.embedApiKey;
         _status = status;
         _loading = false;
       });
@@ -81,6 +94,13 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
         apiKey: _provider == AiProvider.openAi ? _apiKey.text.trim() : '',
         chatModel: _chatModel.text.trim(),
         embedModel: _embedModel.text.trim(),
+        embedProvider: _useSameService ? _provider : _embedProvider,
+        embedBaseUrl: _useSameService ? '' : _embedBaseUrl.text.trim(),
+        embedApiKey: _useSameService
+            ? ''
+            : (_embedProvider == AiProvider.openAi
+                ? _embedApiKey.text.trim()
+                : ''),
       );
 
   Future<void> _save() async {
@@ -168,6 +188,8 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
     );
   }
 
+  // ---------------------------------------------------------------------------
+
   @override
   Widget build(BuildContext context) {
     final palette = context.palette;
@@ -178,7 +200,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
           : ListView(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
               children: [
-                _sectionTitle('服务配置'),
+                _sectionTitle('对话模型'),
                 Card(
                   child: Padding(
                     padding: const EdgeInsets.all(16),
@@ -230,19 +252,8 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                         TextField(
                           controller: _chatModel,
                           decoration: InputDecoration(
-                            labelText: '对话模型',
+                            labelText: '模型名称',
                             hintText: '如：qwen3:4b',
-                            isDense: true,
-                            filled: true,
-                            fillColor: palette.cardFace,
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        TextField(
-                          controller: _embedModel,
-                          decoration: InputDecoration(
-                            labelText: '向量模型',
-                            hintText: '如：nomic-embed-text',
                             isDense: true,
                             filled: true,
                             fillColor: palette.cardFace,
@@ -290,6 +301,87 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
+                _sectionTitle('向量模型'),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SwitchListTile(
+                          title: const Text('使用与对话相同的服务'),
+                          subtitle: Text(
+                            _useSameService
+                                ? '向量请求将发送到对话模型的服务地址'
+                                : '可独立配置向量服务的地址和认证',
+                            style: TextStyle(
+                                fontSize: 12, color: palette.inkSoft),
+                          ),
+                          value: _useSameService,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: (v) =>
+                              setState(() => _useSameService = v),
+                        ),
+                        if (!_useSameService) ...[
+                          const SizedBox(height: 10),
+                          SegmentedButton<AiProvider>(
+                            segments: const [
+                              ButtonSegment(
+                                value: AiProvider.ollama,
+                                label: Text('Ollama'),
+                              ),
+                              ButtonSegment(
+                                value: AiProvider.openAi,
+                                label: Text('OpenAI 兼容'),
+                              ),
+                            ],
+                            selected: {_embedProvider},
+                            onSelectionChanged: (s) =>
+                                setState(() => _embedProvider = s.first),
+                          ),
+                          const SizedBox(height: 14),
+                          TextField(
+                            controller: _embedBaseUrl,
+                            decoration: InputDecoration(
+                              labelText: '向量服务地址',
+                              hintText:
+                                  'http://localhost:11434（本地 Ollama）',
+                              isDense: true,
+                              filled: true,
+                              fillColor: palette.cardFace,
+                            ),
+                            keyboardType: TextInputType.url,
+                          ),
+                          if (_embedProvider == AiProvider.openAi) ...[
+                            const SizedBox(height: 10),
+                            TextField(
+                              controller: _embedApiKey,
+                              obscureText: true,
+                              decoration: InputDecoration(
+                                labelText: 'API Key',
+                                isDense: true,
+                                filled: true,
+                                fillColor: palette.cardFace,
+                              ),
+                            ),
+                          ],
+                        ],
+                        const SizedBox(height: 10),
+                        TextField(
+                          controller: _embedModel,
+                          decoration: InputDecoration(
+                            labelText: '向量模型',
+                            hintText: '如：nomic-embed-text',
+                            isDense: true,
+                            filled: true,
+                            fillColor: palette.cardFace,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
                 _sectionTitle('语义向量'),
                 Card(
                   child: Padding(
@@ -316,7 +408,9 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                           ),
                           const SizedBox(height: 12),
                         ],
-                        Row(
+                        Wrap(
+                          spacing: 10,
+                          runSpacing: 8,
                           children: [
                             OutlinedButton.icon(
                               onPressed: _backfilling || _rebuildProgress != null
@@ -332,7 +426,6 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                                   : const Icon(Icons.playlist_add),
                               label: Text(_backfilling ? '补齐中…' : '补齐待处理向量'),
                             ),
-                            const SizedBox(width: 10),
                             OutlinedButton.icon(
                               onPressed:
                                   _rebuildProgress != null ? null : _rebuild,

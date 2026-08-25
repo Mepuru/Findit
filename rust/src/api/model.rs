@@ -105,6 +105,10 @@ pub struct AiStatus {
     pub base_url: String,
     pub chat_model: String,
     pub embed_model: String,
+    /// 向量服务实际使用的 Provider（回退对话 Provider）。
+    pub embed_provider: crate::core::ai::config::AiProvider,
+    /// 向量服务实际使用的地址。
+    pub embed_base_url: String,
     /// 库存向量实际使用的模型名（未回填过为 `None`）。
     pub embedded_model: Option<String>,
     /// 库存向量维度。

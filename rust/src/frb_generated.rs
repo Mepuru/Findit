@@ -1659,12 +1659,18 @@ impl SseDecode for crate::core::ai::config::AiConfig {
         let mut var_apiKey = <String>::sse_decode(deserializer);
         let mut var_chatModel = <String>::sse_decode(deserializer);
         let mut var_embedModel = <String>::sse_decode(deserializer);
+        let mut var_embedProvider = <crate::core::ai::config::AiProvider>::sse_decode(deserializer);
+        let mut var_embedBaseUrl = <String>::sse_decode(deserializer);
+        let mut var_embedApiKey = <String>::sse_decode(deserializer);
         return crate::core::ai::config::AiConfig {
             provider: var_provider,
             base_url: var_baseUrl,
             api_key: var_apiKey,
             chat_model: var_chatModel,
             embed_model: var_embedModel,
+            embed_provider: var_embedProvider,
+            embed_base_url: var_embedBaseUrl,
+            embed_api_key: var_embedApiKey,
         };
     }
 }
@@ -1689,6 +1695,8 @@ impl SseDecode for crate::api::model::AiStatus {
         let mut var_baseUrl = <String>::sse_decode(deserializer);
         let mut var_chatModel = <String>::sse_decode(deserializer);
         let mut var_embedModel = <String>::sse_decode(deserializer);
+        let mut var_embedProvider = <crate::core::ai::config::AiProvider>::sse_decode(deserializer);
+        let mut var_embedBaseUrl = <String>::sse_decode(deserializer);
         let mut var_embeddedModel = <Option<String>>::sse_decode(deserializer);
         let mut var_embeddedDim = <Option<i64>>::sse_decode(deserializer);
         let mut var_pendingEmbeddings = <i64>::sse_decode(deserializer);
@@ -1701,6 +1709,8 @@ impl SseDecode for crate::api::model::AiStatus {
             base_url: var_baseUrl,
             chat_model: var_chatModel,
             embed_model: var_embedModel,
+            embed_provider: var_embedProvider,
+            embed_base_url: var_embedBaseUrl,
             embedded_model: var_embeddedModel,
             embedded_dim: var_embeddedDim,
             pending_embeddings: var_pendingEmbeddings,
@@ -2414,6 +2424,9 @@ impl flutter_rust_bridge::IntoDart for crate::core::ai::config::AiConfig {
             self.api_key.into_into_dart().into_dart(),
             self.chat_model.into_into_dart().into_dart(),
             self.embed_model.into_into_dart().into_dart(),
+            self.embed_provider.into_into_dart().into_dart(),
+            self.embed_base_url.into_into_dart().into_dart(),
+            self.embed_api_key.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -2459,6 +2472,8 @@ impl flutter_rust_bridge::IntoDart for crate::api::model::AiStatus {
             self.base_url.into_into_dart().into_dart(),
             self.chat_model.into_into_dart().into_dart(),
             self.embed_model.into_into_dart().into_dart(),
+            self.embed_provider.into_into_dart().into_dart(),
+            self.embed_base_url.into_into_dart().into_dart(),
             self.embedded_model.into_into_dart().into_dart(),
             self.embedded_dim.into_into_dart().into_dart(),
             self.pending_embeddings.into_into_dart().into_dart(),
@@ -2988,6 +3003,9 @@ impl SseEncode for crate::core::ai::config::AiConfig {
         <String>::sse_encode(self.api_key, serializer);
         <String>::sse_encode(self.chat_model, serializer);
         <String>::sse_encode(self.embed_model, serializer);
+        <crate::core::ai::config::AiProvider>::sse_encode(self.embed_provider, serializer);
+        <String>::sse_encode(self.embed_base_url, serializer);
+        <String>::sse_encode(self.embed_api_key, serializer);
     }
 }
 
@@ -3015,6 +3033,8 @@ impl SseEncode for crate::api::model::AiStatus {
         <String>::sse_encode(self.base_url, serializer);
         <String>::sse_encode(self.chat_model, serializer);
         <String>::sse_encode(self.embed_model, serializer);
+        <crate::core::ai::config::AiProvider>::sse_encode(self.embed_provider, serializer);
+        <String>::sse_encode(self.embed_base_url, serializer);
         <Option<String>>::sse_encode(self.embedded_model, serializer);
         <Option<i64>>::sse_encode(self.embedded_dim, serializer);
         <i64>::sse_encode(self.pending_embeddings, serializer);

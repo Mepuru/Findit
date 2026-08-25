@@ -63,8 +63,8 @@ pub fn chat_url(config: &AiConfig) -> String {
 
 /// 向量端点。
 pub fn embed_url(config: &AiConfig) -> String {
-    let base = config.normalized_base_url();
-    match config.provider {
+    let base = config.normalized_embed_base_url();
+    match config.effective_embed_provider() {
         AiProvider::Ollama => format!("{base}/api/embed"),
         AiProvider::OpenAi => format!("{base}/v1/embeddings"),
     }
@@ -269,7 +269,8 @@ impl HttpAiTransport {
     /// 发送一次 POST 并解析 JSON 响应（不含重试）。
     fn post_once(
         &self,
-        config: &AiConfig,
+        provider: AiProvider,
+        api_key: &str,
         url: &str,
         body: &Value,
         timeout: Duration,
@@ -280,8 +281,8 @@ impl HttpAiTransport {
             .map_err(|e| AiError::Network(format!("HTTP 客户端初始化失败：{e}")))?;
 
         let mut request = client.post(url).json(body);
-        if config.provider == AiProvider::OpenAi && !config.api_key.trim().is_empty() {
-            request = request.bearer_auth(config.api_key.trim());
+        if provider == AiProvider::OpenAi && !api_key.trim().is_empty() {
+            request = request.bearer_auth(api_key.trim());
         }
 
         let response = request
@@ -309,9 +310,10 @@ impl AiTransport for HttpAiTransport {
         let url = chat_url(config);
         let body = build_chat_body(config, system, user);
         let timeout = self.chat_timeout;
+        let api_key = config.api_key.clone();
         retry_on_network(
             || {
-                let value = self.post_once(config, &url, &body, timeout)?;
+                let value = self.post_once(config.provider, &api_key, &url, &body, timeout)?;
                 extract_chat_content(config.provider, &value)
             },
             self.backoffs(),
@@ -330,10 +332,12 @@ impl AiTransport for HttpAiTransport {
         let body = build_embed_body(config, inputs);
         let timeout = self.embed_timeout;
         let expected = inputs.len();
+        let embed_provider = config.effective_embed_provider();
+        let embed_api_key = config.effective_embed_api_key();
         retry_on_network(
             || {
-                let value = self.post_once(config, &url, &body, timeout)?;
-                extract_embeddings(config.provider, &value, expected)
+                let value = self.post_once(embed_provider, &embed_api_key, &url, &body, timeout)?;
+                extract_embeddings(embed_provider, &value, expected)
             },
             self.backoffs(),
             std::thread::sleep,
@@ -363,6 +367,9 @@ mod tests {
             api_key: String::new(),
             chat_model: "qwen3:4b".to_string(),
             embed_model: "nomic-embed-text".to_string(),
+            embed_provider: AiProvider::Ollama,
+            embed_base_url: String::new(),
+            embed_api_key: String::new(),
         }
     }
 
@@ -373,6 +380,9 @@ mod tests {
             api_key: "sk-x".to_string(),
             chat_model: "gpt-4o-mini".to_string(),
             embed_model: "text-embedding-3-small".to_string(),
+            embed_provider: AiProvider::OpenAi,
+            embed_base_url: String::new(),
+            embed_api_key: String::new(),
         }
     }
 
@@ -388,6 +398,16 @@ mod tests {
             embed_url(&openai_config()),
             "https://api.example.com/v1/embeddings"
         );
+    }
+
+    #[test]
+    fn embed_url_uses_separate_provider_when_configured() {
+        let mut cfg = openai_config();
+        cfg.embed_provider = AiProvider::Ollama;
+        cfg.embed_base_url = "http://local-ollama:11434".to_string();
+        // 对话用 OpenAI，向量用 Ollama
+        assert_eq!(chat_url(&cfg), "https://api.example.com/v1/chat/completions");
+        assert_eq!(embed_url(&cfg), "http://local-ollama:11434/api/embed");
     }
 
     #[test]

@@ -46,6 +46,9 @@ pub async fn save_ai_config(config: AiConfig) -> Result<bool, FinditError> {
     if config.base_url.trim().is_empty() {
         return Err(FinditError::Validation("服务地址不能为空".to_string()));
     }
+    if config.has_separate_embed_service() && config.embed_base_url.trim().is_empty() {
+        return Err(FinditError::Validation("向量服务地址不能为空".to_string()));
+    }
     with_conn(|conn| crate::core::ai::config::save_ai_config(conn, &config)).map(|_| true)
 }
 
@@ -88,12 +91,17 @@ pub async fn test_ai_connection() -> Result<AiTestResult, FinditError> {
         }
         Err(e) => result.chat_message = ai_error_message(e),
     }
-    match transport.embed(&config, &["探活测试".to_string()]) {
-        Ok(_) => {
-            result.embed_ok = true;
-            result.embed_message = format!("向量正常（模型：{}）", config.embed_model);
+    // 向量测试使用有效向量配置（可能独立配置，也可能回退对话配置）。
+    if !config.is_configured() && !config.has_separate_embed_service() {
+        result.embed_message = "未配置向量服务地址".to_string();
+    } else {
+        match transport.embed(&config, &["探活测试".to_string()]) {
+            Ok(_) => {
+                result.embed_ok = true;
+                result.embed_message = format!("向量正常（模型：{}）", config.embed_model);
+            }
+            Err(e) => result.embed_message = ai_error_message(e),
         }
-        Err(e) => result.embed_message = ai_error_message(e),
     }
 
     cache_test_result(result.clone());
@@ -129,12 +137,16 @@ pub async fn get_ai_status() -> Result<AiStatus, FinditError> {
     })?;
 
     let cached = fresh_cached_test();
+    let embed_provider = config.effective_embed_provider();
+    let embed_base_url = config.effective_embed_base_url();
     Ok(AiStatus {
         configured: config.is_configured(),
         provider: config.provider,
         base_url: config.base_url,
         chat_model: config.chat_model,
         embed_model: config.embed_model,
+        embed_provider,
+        embed_base_url,
         embedded_model,
         embedded_dim,
         pending_embeddings: pending,

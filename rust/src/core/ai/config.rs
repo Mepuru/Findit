@@ -11,6 +11,10 @@ pub const KEY_BASE_URL: &str = "ai_base_url";
 pub const KEY_API_KEY: &str = "ai_api_key";
 pub const KEY_CHAT_MODEL: &str = "ai_chat_model";
 pub const KEY_EMBED_MODEL: &str = "ai_embed_model";
+/// 向量服务独立配置；为空时回退对话服务配置。
+pub const KEY_EMBED_PROVIDER: &str = "ai_embed_provider";
+pub const KEY_EMBED_BASE_URL: &str = "ai_embed_base_url";
+pub const KEY_EMBED_API_KEY: &str = "ai_embed_api_key";
 /// 记录当前库存向量实际使用的模型名与维度（维度变更时触发清空重建）。
 pub const KEY_EMBEDDED_MODEL: &str = "embedding_model";
 pub const KEY_EMBEDDED_DIM: &str = "embedding_dim";
@@ -72,6 +76,10 @@ pub struct AiConfig {
     pub api_key: String,
     pub chat_model: String,
     pub embed_model: String,
+    /// 向量服务独立配置；为空时回退对话服务对应字段。
+    pub embed_provider: AiProvider,
+    pub embed_base_url: String,
+    pub embed_api_key: String,
 }
 
 impl AiConfig {
@@ -84,6 +92,46 @@ impl AiConfig {
     pub fn normalized_base_url(&self) -> String {
         self.base_url.trim().trim_end_matches('/').to_string()
     }
+
+    /// 向量实际使用的 Provider（独立配置为空时回退对话 Provider）。
+    pub fn effective_embed_provider(&self) -> AiProvider {
+        if self.embed_base_url.trim().is_empty() {
+            self.provider
+        } else {
+            self.embed_provider
+        }
+    }
+
+    /// 向量实际使用的服务地址。
+    pub fn effective_embed_base_url(&self) -> String {
+        if self.embed_base_url.trim().is_empty() {
+            self.base_url.clone()
+        } else {
+            self.embed_base_url.clone()
+        }
+    }
+
+    /// 去掉末尾 `/` 的向量服务地址。
+    pub fn normalized_embed_base_url(&self) -> String {
+        self.effective_embed_base_url()
+            .trim()
+            .trim_end_matches('/')
+            .to_string()
+    }
+
+    /// 向量实际使用的 API Key。
+    pub fn effective_embed_api_key(&self) -> String {
+        if self.embed_base_url.trim().is_empty() {
+            self.api_key.clone()
+        } else {
+            self.embed_api_key.clone()
+        }
+    }
+
+    /// 向量服务是否独立配置（embed_base_url 非空）。
+    pub fn has_separate_embed_service(&self) -> bool {
+        !self.embed_base_url.trim().is_empty()
+    }
 }
 
 /// 某 Provider 的全默认配置。
@@ -94,6 +142,9 @@ pub fn default_config(provider: AiProvider) -> AiConfig {
         api_key: String::new(),
         chat_model: provider.default_chat_model().to_string(),
         embed_model: provider.default_embed_model().to_string(),
+        embed_provider: provider,
+        embed_base_url: String::new(),
+        embed_api_key: String::new(),
     }
 }
 
@@ -117,12 +168,24 @@ pub fn load_ai_config(conn: &Connection) -> FinditResult<AiConfig> {
         .map(|v| v.trim().to_string())
         .filter(|v| !v.is_empty())
         .unwrap_or(defaults.embed_model);
+    // 向量独立配置：缺失或为空时保持空字符串，运行时回退对话服务配置。
+    let embed_provider = match get_setting(conn, KEY_EMBED_PROVIDER)? {
+        Some(raw) if !raw.trim().is_empty() => AiProvider::parse(&raw),
+        _ => provider,
+    };
+    let embed_base_url = get_setting(conn, KEY_EMBED_BASE_URL)?
+        .map(|v| v.trim().to_string())
+        .unwrap_or_default();
+    let embed_api_key = get_setting(conn, KEY_EMBED_API_KEY)?.unwrap_or_default();
     Ok(AiConfig {
         provider,
         base_url,
         api_key,
         chat_model,
         embed_model,
+        embed_provider,
+        embed_base_url,
+        embed_api_key,
     })
 }
 
@@ -133,6 +196,9 @@ pub fn save_ai_config(conn: &Connection, config: &AiConfig) -> FinditResult<()> 
     set_setting(conn, KEY_API_KEY, &config.api_key)?;
     set_setting(conn, KEY_CHAT_MODEL, config.chat_model.trim())?;
     set_setting(conn, KEY_EMBED_MODEL, config.embed_model.trim())?;
+    set_setting(conn, KEY_EMBED_PROVIDER, config.embed_provider.as_str())?;
+    set_setting(conn, KEY_EMBED_BASE_URL, config.embed_base_url.trim())?;
+    set_setting(conn, KEY_EMBED_API_KEY, &config.embed_api_key)?;
     Ok(())
 }
 
@@ -177,6 +243,9 @@ mod tests {
             api_key: "sk-test".to_string(),
             chat_model: "qwen-plus".to_string(),
             embed_model: "text-embedding-v3".to_string(),
+            embed_provider: AiProvider::Ollama,
+            embed_base_url: "http://10.0.2.2:11434".to_string(),
+            embed_api_key: String::new(),
         };
         save_ai_config(&conn, &cfg).unwrap();
         let loaded = load_ai_config(&conn).unwrap();
@@ -214,5 +283,46 @@ mod tests {
         let mut cfg = default_config(AiProvider::Ollama);
         cfg.base_url = "http://host:11434//".to_string();
         assert_eq!(cfg.normalized_base_url(), "http://host:11434");
+    }
+
+    #[test]
+    fn embed_falls_back_to_chat_when_empty() {
+        let cfg = default_config(AiProvider::OpenAi);
+        // 独立向量为空 → 回退对话配置。
+        assert_eq!(cfg.effective_embed_provider(), AiProvider::OpenAi);
+        assert_eq!(cfg.effective_embed_base_url(), "https://api.openai.com");
+        assert_eq!(cfg.effective_embed_api_key(), String::new());
+        assert!(!cfg.has_separate_embed_service());
+    }
+
+    #[test]
+    fn embed_uses_separate_config_when_set() {
+        let mut cfg = default_config(AiProvider::OpenAi);
+        cfg.embed_provider = AiProvider::Ollama;
+        cfg.embed_base_url = "http://localhost:11434".to_string();
+        cfg.embed_api_key = String::new();
+        assert_eq!(cfg.effective_embed_provider(), AiProvider::Ollama);
+        assert_eq!(cfg.effective_embed_base_url(), "http://localhost:11434");
+        assert!(cfg.has_separate_embed_service());
+    }
+
+    #[test]
+    fn separate_embed_service_roundtrip() {
+        let conn = setup();
+        let cfg = AiConfig {
+            provider: AiProvider::OpenAi,
+            base_url: "https://api.openai.com".to_string(),
+            api_key: "sk-chat".to_string(),
+            chat_model: "gpt-4o-mini".to_string(),
+            embed_model: "nomic-embed-text".to_string(),
+            embed_provider: AiProvider::Ollama,
+            embed_base_url: "http://10.0.2.2:11434".to_string(),
+            embed_api_key: String::new(),
+        };
+        save_ai_config(&conn, &cfg).unwrap();
+        let loaded = load_ai_config(&conn).unwrap();
+        assert_eq!(loaded.embed_provider, AiProvider::Ollama);
+        assert_eq!(loaded.embed_base_url, "http://10.0.2.2:11434");
+        assert!(loaded.has_separate_embed_service());
     }
 }

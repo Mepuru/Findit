@@ -19,6 +19,12 @@ class AiStatus {
   final String chatModel;
   final String embedModel;
 
+  /// 向量服务实际使用的 Provider（回退对话 Provider）。
+  final AiProvider embedProvider;
+
+  /// 向量服务实际使用的地址。
+  final String embedBaseUrl;
+
   /// 库存向量实际使用的模型名（未回填过为 `None`）。
   final String? embeddedModel;
 
@@ -43,6 +49,8 @@ class AiStatus {
     required this.baseUrl,
     required this.chatModel,
     required this.embedModel,
+    required this.embedProvider,
+    required this.embedBaseUrl,
     this.embeddedModel,
     this.embeddedDim,
     required this.pendingEmbeddings,
@@ -58,6 +66,8 @@ class AiStatus {
       baseUrl.hashCode ^
       chatModel.hashCode ^
       embedModel.hashCode ^
+      embedProvider.hashCode ^
+      embedBaseUrl.hashCode ^
       embeddedModel.hashCode ^
       embeddedDim.hashCode ^
       pendingEmbeddings.hashCode ^
@@ -75,6 +85,8 @@ class AiStatus {
           baseUrl == other.baseUrl &&
           chatModel == other.chatModel &&
           embedModel == other.embedModel &&
+          embedProvider == other.embedProvider &&
+          embedBaseUrl == other.embedBaseUrl &&
           embeddedModel == other.embeddedModel &&
           embeddedDim == other.embeddedDim &&
           pendingEmbeddings == other.pendingEmbeddings &&
