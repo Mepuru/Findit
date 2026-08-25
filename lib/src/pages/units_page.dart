@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'boxes_page.dart';
 import 'scan_page.dart';
+import 'search_page.dart';
 
 /// 第一级：存储单元列表。
 class UnitsPage extends StatefulWidget {
@@ -92,13 +93,14 @@ class _UnitsPageState extends State<UnitsPage> {
         .then((_) => _reload());
   }
 
-  void _showPlaceholder(String feature) {
-    showErrorSnack(context, '$feature功能将在后续版本上线，敬请期待。');
-  }
-
   Future<void> _openScan() async {
     await Navigator.of(context)
         .push(MaterialPageRoute(builder: (_) => const ScanPage()));
+  }
+
+  Future<void> _openSearch() async {
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const SearchPage()));
   }
 
   @override
@@ -124,7 +126,7 @@ class _UnitsPageState extends State<UnitsPage> {
           IconButton(
             tooltip: '搜索',
             icon: const Icon(Icons.search_rounded),
-            onPressed: () => _showPlaceholder('搜索'),
+            onPressed: _openSearch,
           ),
           IconButton(
             tooltip: '扫码',
