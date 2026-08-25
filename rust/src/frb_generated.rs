@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 724510848;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 997593634;
 
 // Section: executor
 
@@ -314,6 +314,42 @@ fn wire__crate__api__items__delete_item_impl(
         },
     )
 }
+fn wire__crate__api__photos__delete_item_photo_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "delete_item_photo",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_item_id = <i64>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::core::error::FinditError>(
+                    (move || async move {
+                        let output_ok = crate::api::photos::delete_item_photo(api_item_id).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__units__delete_unit_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -458,6 +494,43 @@ fn wire__crate__api__items__get_item_impl(
         },
     )
 }
+fn wire__crate__api__photos__get_photo_full_path_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_photo_full_path",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_file_name = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::core::error::FinditError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::photos::get_photo_full_path(api_file_name).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
 fn wire__crate__api__settings__get_setting_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -486,6 +559,43 @@ fn wire__crate__api__settings__get_setting_impl(
                 transform_result_sse::<_, crate::core::error::FinditError>(
                     (move || async move {
                         let output_ok = crate::api::settings::get_setting(api_key).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__photos__get_thumb_full_path_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "get_thumb_full_path",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_file_name = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::core::error::FinditError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::photos::get_thumb_full_path(api_file_name).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -770,6 +880,44 @@ fn wire__crate__api__categories__rename_category_impl(
                     (move || async move {
                         let output_ok =
                             crate::api::categories::rename_category(api_id, api_new_name).await?;
+                        Ok(output_ok)
+                    })()
+                    .await,
+                )
+            }
+        },
+    )
+}
+fn wire__crate__api__photos__save_item_photo_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_async::<flutter_rust_bridge::for_generated::SseCodec, _, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "save_item_photo",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_item_id = <i64>::sse_decode(&mut deserializer);
+            let api_bytes = <Vec<u8>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| async move {
+                transform_result_sse::<_, crate::core::error::FinditError>(
+                    (move || async move {
+                        let output_ok =
+                            crate::api::photos::save_item_photo(api_item_id, api_bytes).await?;
                         Ok(output_ok)
                     })()
                     .await,
@@ -1243,23 +1391,27 @@ fn pde_ffi_dispatcher_primary_impl(
         5 => wire__crate__api__boxes__delete_box_impl(port, ptr, rust_vec_len, data_len),
         6 => wire__crate__api__categories__delete_category_impl(port, ptr, rust_vec_len, data_len),
         7 => wire__crate__api__items__delete_item_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__units__delete_unit_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__boxes__get_box_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__boxes__get_box_by_slug_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__items__get_item_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__units__get_unit_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__db__init_db_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__boxes__list_boxes_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__categories__list_categories_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__items__list_items_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__units__list_units_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__categories__rename_category_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__boxes__update_box_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__items__update_item_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__units__update_unit_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__photos__delete_item_photo_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__units__delete_unit_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__boxes__get_box_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__boxes__get_box_by_slug_impl(port, ptr, rust_vec_len, data_len),
+        12 => wire__crate__api__items__get_item_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__photos__get_photo_full_path_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__photos__get_thumb_full_path_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__units__get_unit_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__db__init_db_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__boxes__list_boxes_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__categories__list_categories_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__items__list_items_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__units__list_units_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__categories__rename_category_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__photos__save_item_photo_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__boxes__update_box_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__items__update_item_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__units__update_unit_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
