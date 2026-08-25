@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/ai.dart' as ai;
 import 'package:findit/src/rust/core/ai/parse.dart';
+import 'package:speech_to_text/speech_recognition_result.dart';
+import 'package:speech_to_text/speech_to_text.dart';
 
 import '../errors.dart';
 import '../theme.dart';
@@ -39,8 +41,15 @@ class _QuickAddPageState extends State<QuickAddPage> {
   Object? _error;
   String _summary = '';
 
+  // ------------------ 语音输入 ------------------
+  final SpeechToText _speech = SpeechToText();
+  bool _listening = false;
+  bool _speechReady = false;
+
   @override
   void dispose() {
+    // 离开页面时停止未结束的识别会话。
+    _speech.stop();
     _inputController.dispose();
     _unitName.dispose();
     _boxName.dispose();
@@ -157,6 +166,74 @@ class _QuickAddPageState extends State<QuickAddPage> {
     }
   }
 
+  /// 切换语音识别：中文（zh_CN）优先，失败回退系统默认语言；
+  /// 识别不可用（无权限/不支持）时提示但不影响文本输入。
+  Future<void> _toggleSpeech() async {
+    if (_listening) {
+      await _speech.stop();
+      if (mounted) setState(() => _listening = false);
+      return;
+    }
+    if (!_speechReady) {
+      bool ok = false;
+      try {
+        ok = await _speech.initialize();
+      } catch (_) {
+        ok = false;
+      }
+      if (!ok || !mounted) {
+        if (mounted) {
+          _snack('语音输入不可用：请授予麦克风权限或检查设备支持');
+        }
+        return;
+      }
+      _speechReady = true;
+    }
+    setState(() => _listening = true);
+
+    void onResult(SpeechRecognitionResult r) {
+      if (!mounted) return;
+      final words = r.recognizedWords.trim();
+      if (words.isNotEmpty) {
+        _inputController.text = words;
+        _inputController.selection = TextSelection.fromPosition(
+          TextPosition(offset: _inputController.text.length),
+        );
+      }
+      if (r.finalResult) setState(() => _listening = false);
+    }
+
+    try {
+      // 优先中文识别。
+      await _speech.listen(
+        onResult: onResult,
+        listenOptions: SpeechListenOptions(
+          localeId: 'zh_CN',
+          partialResults: true,
+        ),
+      );
+    } catch (_) {
+      try {
+        // zh_CN 不可用时回退系统默认语言。
+        await _speech.listen(
+          onResult: onResult,
+          listenOptions: SpeechListenOptions(partialResults: true),
+        );
+      } catch (_) {
+        if (mounted) {
+          setState(() => _listening = false);
+          _snack('启动语音识别失败，请直接输入文字');
+        }
+      }
+    }
+  }
+
+  void _snack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+    );
+  }
+
   void _restart() {
     for (final c in [
       _inputController,
@@ -221,6 +298,14 @@ class _QuickAddPageState extends State<QuickAddPage> {
                 hintText: '输入一句话，如：把电钻放进车库的蓝色箱子',
                 filled: true,
                 fillColor: context.palette.cardFace,
+                suffixIcon: IconButton(
+                  tooltip: _listening ? '停止语音输入' : '语音输入',
+                  icon: Icon(
+                    _listening ? Icons.stop_circle_rounded : Icons.mic_rounded,
+                    color: _listening ? context.palette.danger : null,
+                  ),
+                  onPressed: _phase == _Phase.input ? _toggleSpeech : null,
+                ),
               ),
               onSubmitted: (_) {
                 if (_phase == _Phase.input) _parse();
