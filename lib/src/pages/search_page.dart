@@ -13,8 +13,8 @@ import 'items_page.dart';
 
 /// 全局搜索：关键词 + 语义双通道。
 ///
-/// 搜索时先生成查询向量（失败或未配置时返回 null，自动降级为纯关键词），
-/// 再交给 `search_items` 双通道检索；语义结果置顶并展示匹配度百分比徽章。
+/// 关键词搜索与查询向量生成并发进行：先展示关键词结果，
+/// 向量到达后再补充语义结果重排（向量失败/未配置则保持纯关键词）。
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -64,19 +64,23 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
     try {
-      // 查询向量：未配置 / 超时 / 失败均返回 null，降级为纯关键词搜索。
-      Float32List? embedding;
-      try {
-        embedding = await ai_api.generateQueryEmbedding(text: query);
-      } catch (_) {
-        embedding = null;
-      }
-      if (!mounted || seq != _seq) return;
-      final results = await api.searchItems(query: query, embedding: embedding);
+      // 向量生成与关键词搜索并发：不等向量就先出关键词结果，
+      // AI 不可达时搜索不再被超时阻塞。
+      final embeddingFuture = _safeQueryEmbedding(query);
+      final keywordResults = await api.searchItems(query: query);
       if (!mounted || seq != _seq) return;
       setState(() {
         _state = _SearchState.loaded;
-        _results = results;
+        _results = keywordResults;
+      });
+      // 向量到达后补充语义结果（去重后重排展示）。
+      final embedding = await embeddingFuture;
+      if (!mounted || seq != _seq || embedding == null) return;
+      final merged =
+          await api.searchItems(query: query, embedding: embedding);
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _results = merged;
       });
     } catch (e) {
       if (!mounted || seq != _seq) return;
@@ -87,11 +91,21 @@ class _SearchPageState extends State<SearchPage> {
     }
   }
 
+  /// 生成查询向量：未配置 / 超时 / 失败均返回 null（降级为纯关键词）。
+  Future<Float32List?> _safeQueryEmbedding(String query) async {
+    try {
+      return await ai_api.generateQueryEmbedding(text: query);
+    } catch (_) {
+      return null;
+    }
+  }
+
   void _openResult(SearchResult result) {
     Navigator.of(context)
         .push(MaterialPageRoute(
             builder: (_) => ItemsPage(boxId: result.boxId.toInt())))
         .then((_) {
+      if (!mounted) return;
       // 返回后结果可能过期，用当前输入重新检索。
       final query = _controller.text.trim();
       if (query.isNotEmpty) _search(query);
