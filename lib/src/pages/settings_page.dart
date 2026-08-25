@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
@@ -6,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/backup.dart' as backup;
 import 'package:findit/src/rust/api/model.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../errors.dart';
 import '../theme.dart';
@@ -73,7 +73,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final progress = ValueNotifier<_OpProgress>(
       const _OpProgress('准备中…', 0, 0),
     );
-    unawaited(showDialog<void>(
+    final dialogFuture = showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => PopScope(
@@ -118,14 +118,17 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ),
-    ));
+    );
     try {
       return await task((p) => progress.value = p);
     } finally {
-      progress.dispose();
+      // 先关闭对话框，等其路由真正退出后再释放进度通知器，
+      // 避免 ValueListenableBuilder 在 dispose 后仍收到帧回调。
       if (mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop(); // 关闭进度对话框
       }
+      await dialogFuture;
+      progress.dispose();
     }
   }
 
@@ -164,23 +167,23 @@ class _SettingsPageState extends State<SettingsPage> {
       );
 
       if (!mounted) return;
-      // 交给用户选择保存位置（file_picker v12 需要传入字节）。
-      final bytes = await staging.readAsBytes();
-      final uri = await FilePicker.saveFile(
-        fileName: fileName,
-        bytes: bytes,
-        dialogTitle: '保存备份文件',
+      // 通过系统分享面板移交文件路径，不把整个 zip 读入内存；
+      // 无论用户保存还是取消，都清理暂存文件避免无限堆积。
+      final result = await SharePlus.instance.share(
+        ShareParams(files: [XFile(staging.path)]),
       );
+      try {
+        if (await staging.exists()) await staging.delete();
+      } catch (_) {}
       if (!mounted) return;
-      if (uri != null) {
-        await staging.delete();
-        final s = summary;
+      final s = summary;
+      if (result.status == ShareResultStatus.success) {
         _snack(s == null
             ? '备份已保存'
             : '备份已保存：${s.unitsCount} 个单元、${s.boxesCount} 个箱、'
                 '${s.itemsCount} 件物品、${s.photosCount} 张照片文件');
       } else {
-        _snack('已导出到应用目录：${staging.path}');
+        _snack('备份未保存（已取消分享）');
       }
     } catch (e) {
       if (mounted) showErrorSnack(context, e);
