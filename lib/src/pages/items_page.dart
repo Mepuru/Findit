@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Int64List;
 import 'package:image_picker/image_picker.dart';
+import 'package:findit/src/rust/api/ai.dart' as ai_api;
 import 'package:findit/src/rust/api/boxes.dart' as boxes_api;
 import 'package:findit/src/rust/api/categories.dart' as categories_api;
 import 'package:findit/src/rust/api/items.dart' as api;
@@ -117,6 +118,9 @@ class _ItemsPageState extends State<ItemsPage> {
             );
           }
           await _reload();
+          // 物品写入后异步补齐语义向量；失败静默忽略（启动/手动补齐兜底）。
+          // ignore: unawaited_futures
+          ai_api.backfillPendingEmbeddings().catchError((_) => 0);
         },
       ),
     );

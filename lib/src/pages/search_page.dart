@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:findit/src/rust/api/ai.dart' as ai_api;
 import 'package:findit/src/rust/api/model.dart';
 import 'package:findit/src/rust/api/search.dart' as api;
 
@@ -11,8 +13,8 @@ import 'items_page.dart';
 
 /// 全局搜索：关键词 + 语义双通道。
 ///
-/// 本阶段仅启用关键词通道（`embedding: null`），
-/// UI 已按双通道分区设计：语义结果置顶并展示匹配度百分比徽章。
+/// 搜索时先生成查询向量（失败或未配置时返回 null，自动降级为纯关键词），
+/// 再交给 `search_items` 双通道检索；语义结果置顶并展示匹配度百分比徽章。
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -62,8 +64,15 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
     try {
-      // 本阶段只做关键词搜索；语义向量由后续 AI 阶段注入。
-      final results = await api.searchItems(query: query);
+      // 查询向量：未配置 / 超时 / 失败均返回 null，降级为纯关键词搜索。
+      Float32List? embedding;
+      try {
+        embedding = await ai_api.generateQueryEmbedding(text: query);
+      } catch (_) {
+        embedding = null;
+      }
+      if (!mounted || seq != _seq) return;
+      final results = await api.searchItems(query: query, embedding: embedding);
       if (!mounted || seq != _seq) return;
       setState(() {
         _state = _SearchState.loaded;
@@ -217,7 +226,7 @@ class _IdleHint extends StatelessWidget {
         _hintRow('🧰', '试试搜「工具」', '命中分类名同样有效'),
         _hintRow('🔤', '大小写无所谓', '「drill」也能找到「Power Drill」'),
         _hintRow('🧩', '多词逐条满足', '「蓝色 箱子」两个词都要命中'),
-        _hintRow('🤖', '语义搜索即将上线', '搜「扳手」也能找到「修水管的工具」'),
+        _hintRow('🧠', '语义搜索已上线', '搜「修水管的」也能找到「扳手」'),
       ],
     );
   }

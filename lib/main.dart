@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:findit/src/rust/api/ai.dart' as ai_api;
 import 'package:findit/src/rust/api/db.dart' as rust_db;
 import 'package:findit/src/rust/frb_generated.dart';
 
@@ -38,6 +39,9 @@ class _FinditAppState extends State<FinditApp> {
       await RustLib.init();
       final docDir = await getApplicationDocumentsDirectory();
       await rust_db.initDb(dbDir: docDir.path);
+      // 启动完成后后台轻量回填语义向量；未配置/失败静默忽略。
+      // ignore: unawaited_futures
+      ai_api.backfillPendingEmbeddings().catchError((_) => 0);
       if (!mounted) return;
       setState(() => _boot = _BootState.ready);
     } catch (e) {
