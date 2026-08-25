@@ -1,7 +1,9 @@
 //! 关键词搜索：空白分词，词间 AND、字段间（名称/描述/分类名）OR。
 //!
 //! 拉丁词大小写不敏感：SQL 双侧使用 `lower()` 折叠（SQLite 原生
-//! `lower()` 覆盖 ASCII；中文无大小写问题，直接按 LIKE 子串匹配）。
+//! `lower()` 仅覆盖 ASCII）；查询词在 Rust 侧也只做 ASCII 折叠
+//! （[`fold_ascii`]），保证两侧语义一致（重音等非 ASCII 字符不折叠）。
+//! 中文无大小写问题，直接按 LIKE 子串匹配。
 
 use rusqlite::{params_from_iter, Connection};
 
@@ -19,6 +21,14 @@ pub struct KeywordHit {
 /// 空白分词，丢弃空词。
 pub fn tokenize(query: &str) -> Vec<String> {
     query.split_whitespace().map(str::to_string).collect()
+}
+
+/// 仅折叠 ASCII 大写字母，与 SQLite 原生 `lower()` 行为一致。
+/// 非 ASCII 字符（如重音字母、中文）原样保留。
+fn fold_ascii(s: &str) -> String {
+    s.chars()
+        .map(|c| if c.is_ascii() { c.to_ascii_lowercase() } else { c })
+        .collect()
 }
 
 /// 生成 `%token%` 形式的 LIKE 模式，并转义 LIKE 元字符。
@@ -46,7 +56,7 @@ pub fn search_keyword(conn: &Connection, query: &str) -> FinditResult<Vec<Keywor
     let mut clauses: Vec<String> = Vec::with_capacity(tokens.len());
     let mut binds: Vec<String> = Vec::with_capacity(tokens.len() * 3);
     for token in &tokens {
-        let pattern = like_pattern(&token.to_lowercase());
+        let pattern = like_pattern(&fold_ascii(token));
         clauses.push(
             "(lower(i.name) LIKE ? ESCAPE '\\' \
              OR lower(i.description) LIKE ? ESCAPE '\\' \
@@ -184,6 +194,23 @@ mod tests {
         fixture(&conn);
         let hits = search_keyword(&conn, "drill").unwrap();
         assert_eq!(hit_names(&hits), vec!["Power Drill"]);
+    }
+
+    #[test]
+    fn non_ascii_chars_fold_like_sqlite_lower() {
+        // SQLite 原生 lower() 只折叠 ASCII；Rust 侧必须保持一致，
+        // 否则会出现「查询词被折叠而列值未被折叠」的错位。
+        let conn = setup();
+        let unit = units::create_unit(&conn, "柜子", "").unwrap();
+        let box_ = boxes::create_box(&conn, unit.id, "箱子", "").unwrap();
+        items::create_item(&conn, box_.id, "Café Grinder", "手摇磨豆机", 1, &[]).unwrap();
+
+        // 重音字符大小写一致 + ASCII 大小写不敏感 → 命中。
+        let hits = search_keyword(&conn, "café GRINDER").unwrap();
+        assert_eq!(hit_names(&hits), vec!["Café Grinder"]);
+
+        // 重音字符大小写不一致时不折叠（与 SQLite 行为一致，不命中）。
+        assert!(search_keyword(&conn, "CAFÉ grinder").unwrap().is_empty());
     }
 
     #[test]
