@@ -3,11 +3,117 @@
 
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
+import '../core/ai/config.dart';
 import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+/// AI 总体状态：配置概要 + 短缓存的探活结果。
+class AiStatus {
+  /// 服务地址非空即视为已配置。
+  final bool configured;
+  final AiProvider provider;
+  final String baseUrl;
+  final String chatModel;
+  final String embedModel;
+
+  /// 库存向量实际使用的模型名（未回填过为 `None`）。
+  final String? embeddedModel;
+
+  /// 库存向量维度。
+  final PlatformInt64? embeddedDim;
+
+  /// 待回填物品数。
+  final PlatformInt64 pendingEmbeddings;
+
+  /// 缓存探活：对话可用性（未探活为 `None`）。
+  final bool? lastChatOk;
+
+  /// 缓存探活：向量可用性。
+  final bool? lastEmbedOk;
+
+  /// 缓存探活距今秒数（无缓存为 `None`）。
+  final PlatformInt64? cacheAgeSecs;
+
+  const AiStatus({
+    required this.configured,
+    required this.provider,
+    required this.baseUrl,
+    required this.chatModel,
+    required this.embedModel,
+    this.embeddedModel,
+    this.embeddedDim,
+    required this.pendingEmbeddings,
+    this.lastChatOk,
+    this.lastEmbedOk,
+    this.cacheAgeSecs,
+  });
+
+  @override
+  int get hashCode =>
+      configured.hashCode ^
+      provider.hashCode ^
+      baseUrl.hashCode ^
+      chatModel.hashCode ^
+      embedModel.hashCode ^
+      embeddedModel.hashCode ^
+      embeddedDim.hashCode ^
+      pendingEmbeddings.hashCode ^
+      lastChatOk.hashCode ^
+      lastEmbedOk.hashCode ^
+      cacheAgeSecs.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiStatus &&
+          runtimeType == other.runtimeType &&
+          configured == other.configured &&
+          provider == other.provider &&
+          baseUrl == other.baseUrl &&
+          chatModel == other.chatModel &&
+          embedModel == other.embedModel &&
+          embeddedModel == other.embeddedModel &&
+          embeddedDim == other.embeddedDim &&
+          pendingEmbeddings == other.pendingEmbeddings &&
+          lastChatOk == other.lastChatOk &&
+          lastEmbedOk == other.lastEmbedOk &&
+          cacheAgeSecs == other.cacheAgeSecs;
+}
+
+/// AI 连接探活结果：对话与向量各自可用性 + 错误信息。
+class AiTestResult {
+  final bool chatOk;
+  final String chatMessage;
+  final bool embedOk;
+  final String embedMessage;
+
+  const AiTestResult({
+    required this.chatOk,
+    required this.chatMessage,
+    required this.embedOk,
+    required this.embedMessage,
+  });
+
+  @override
+  int get hashCode =>
+      chatOk.hashCode ^
+      chatMessage.hashCode ^
+      embedOk.hashCode ^
+      embedMessage.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is AiTestResult &&
+          runtimeType == other.runtimeType &&
+          chatOk == other.chatOk &&
+          chatMessage == other.chatMessage &&
+          embedOk == other.embedOk &&
+          embedMessage == other.embedMessage;
+}
 
 /// 分类。
 class Category {
@@ -26,6 +132,44 @@ class Category {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name;
+}
+
+/// 向量重建进度（流式推送）。
+class EmbedProgress {
+  final int done;
+  final int total;
+
+  const EmbedProgress({required this.done, required this.total});
+
+  @override
+  int get hashCode => done.hashCode ^ total.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EmbedProgress &&
+          runtimeType == other.runtimeType &&
+          done == other.done &&
+          total == other.total;
+}
+
+/// 向量重建汇总。
+class EmbedProgressSummary {
+  final int processed;
+  final int total;
+
+  const EmbedProgressSummary({required this.processed, required this.total});
+
+  @override
+  int get hashCode => processed.hashCode ^ total.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is EmbedProgressSummary &&
+          runtimeType == other.runtimeType &&
+          processed == other.processed &&
+          total == other.total;
 }
 
 /// 物品（放在某个收纳箱内）。不含 `embedding`。

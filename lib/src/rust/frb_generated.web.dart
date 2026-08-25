@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/ai.dart';
 import 'api/boxes.dart';
 import 'api/categories.dart';
 import 'api/db.dart';
@@ -15,6 +16,9 @@ import 'api/photos.dart';
 import 'api/search.dart';
 import 'api/settings.dart';
 import 'api/units.dart';
+import 'core/ai/apply.dart';
+import 'core/ai/config.dart';
+import 'core/ai/parse.dart';
 import 'core/error.dart';
 
 import 'dart:async';
@@ -33,10 +37,39 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  RustStreamSink<EmbedProgress> dco_decode_StreamSink_embed_progress_Sse(
+    dynamic raw,
+  );
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
+  AiConfig dco_decode_ai_config(dynamic raw);
+
+  @protected
+  AiProvider dco_decode_ai_provider(dynamic raw);
+
+  @protected
+  AiStatus dco_decode_ai_status(dynamic raw);
+
+  @protected
+  AiTestResult dco_decode_ai_test_result(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
+
+  @protected
+  AiConfig dco_decode_box_autoadd_ai_config(dynamic raw);
+
+  @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw);
+
+  @protected
+  EntityRef dco_decode_box_autoadd_entity_ref(dynamic raw);
 
   @protected
   int dco_decode_box_autoadd_i_32(dynamic raw);
@@ -45,7 +78,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw);
 
   @protected
+  ParsedIntent dco_decode_box_autoadd_parsed_intent(dynamic raw);
+
+  @protected
   Category dco_decode_category(dynamic raw);
+
+  @protected
+  EmbedProgress dco_decode_embed_progress(dynamic raw);
+
+  @protected
+  EmbedProgressSummary dco_decode_embed_progress_summary(dynamic raw);
+
+  @protected
+  EntityRef dco_decode_entity_ref(dynamic raw);
 
   @protected
   double dco_decode_f_32(dynamic raw);
@@ -58,6 +103,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  IntentKind dco_decode_intent_kind(dynamic raw);
 
   @protected
   Item dco_decode_item(dynamic raw);
@@ -96,7 +144,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MatchedBy dco_decode_matched_by(dynamic raw);
 
   @protected
+  ModifyResult dco_decode_modify_result(dynamic raw);
+
+  @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
+
+  @protected
+  EntityRef? dco_decode_opt_box_autoadd_entity_ref(dynamic raw);
 
   @protected
   int? dco_decode_opt_box_autoadd_i_32(dynamic raw);
@@ -111,6 +168,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Int64List? dco_decode_opt_list_prim_i_64_strict(dynamic raw);
 
   @protected
+  ParsedIntent dco_decode_parsed_intent(dynamic raw);
+
+  @protected
+  QuickAddResult dco_decode_quick_add_result(dynamic raw);
+
+  @protected
   SearchResult dco_decode_search_result(dynamic raw);
 
   @protected
@@ -123,10 +186,39 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Unit dco_decode_unit(dynamic raw);
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<EmbedProgress> sse_decode_StreamSink_embed_progress_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
+  AiConfig sse_decode_ai_config(SseDeserializer deserializer);
+
+  @protected
+  AiProvider sse_decode_ai_provider(SseDeserializer deserializer);
+
+  @protected
+  AiStatus sse_decode_ai_status(SseDeserializer deserializer);
+
+  @protected
+  AiTestResult sse_decode_ai_test_result(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  AiConfig sse_decode_box_autoadd_ai_config(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  EntityRef sse_decode_box_autoadd_entity_ref(SseDeserializer deserializer);
 
   @protected
   int sse_decode_box_autoadd_i_32(SseDeserializer deserializer);
@@ -135,7 +227,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
+  ParsedIntent sse_decode_box_autoadd_parsed_intent(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Category sse_decode_category(SseDeserializer deserializer);
+
+  @protected
+  EmbedProgress sse_decode_embed_progress(SseDeserializer deserializer);
+
+  @protected
+  EmbedProgressSummary sse_decode_embed_progress_summary(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  EntityRef sse_decode_entity_ref(SseDeserializer deserializer);
 
   @protected
   double sse_decode_f_32(SseDeserializer deserializer);
@@ -148,6 +256,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  IntentKind sse_decode_intent_kind(SseDeserializer deserializer);
 
   @protected
   Item sse_decode_item(SseDeserializer deserializer);
@@ -188,7 +299,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   MatchedBy sse_decode_matched_by(SseDeserializer deserializer);
 
   @protected
+  ModifyResult sse_decode_modify_result(SseDeserializer deserializer);
+
+  @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
+
+  @protected
+  EntityRef? sse_decode_opt_box_autoadd_entity_ref(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int? sse_decode_opt_box_autoadd_i_32(SseDeserializer deserializer);
@@ -205,6 +327,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Int64List? sse_decode_opt_list_prim_i_64_strict(SseDeserializer deserializer);
 
   @protected
+  ParsedIntent sse_decode_parsed_intent(SseDeserializer deserializer);
+
+  @protected
+  QuickAddResult sse_decode_quick_add_result(SseDeserializer deserializer);
+
+  @protected
   SearchResult sse_decode_search_result(SseDeserializer deserializer);
 
   @protected
@@ -217,10 +345,49 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Unit sse_decode_unit(SseDeserializer deserializer);
 
   @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_embed_progress_Sse(
+    RustStreamSink<EmbedProgress> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ai_config(AiConfig self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ai_provider(AiProvider self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ai_status(AiStatus self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ai_test_result(AiTestResult self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_ai_config(
+    AiConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_entity_ref(
+    EntityRef self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_box_autoadd_i_32(int self, SseSerializer serializer);
@@ -232,7 +399,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_parsed_intent(
+    ParsedIntent self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_category(Category self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_embed_progress(EmbedProgress self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_embed_progress_summary(
+    EmbedProgressSummary self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_entity_ref(EntityRef self, SseSerializer serializer);
 
   @protected
   void sse_encode_f_32(double self, SseSerializer serializer);
@@ -245,6 +430,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_intent_kind(IntentKind self, SseSerializer serializer);
 
   @protected
   void sse_encode_item(Item self, SseSerializer serializer);
@@ -298,7 +486,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_matched_by(MatchedBy self, SseSerializer serializer);
 
   @protected
+  void sse_encode_modify_result(ModifyResult self, SseSerializer serializer);
+
+  @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_entity_ref(
+    EntityRef? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_box_autoadd_i_32(int? self, SseSerializer serializer);
@@ -318,6 +518,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_list_prim_i_64_strict(
     Int64List? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_parsed_intent(ParsedIntent self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_quick_add_result(
+    QuickAddResult self,
     SseSerializer serializer,
   );
 

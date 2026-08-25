@@ -4,6 +4,7 @@
 //! 不会阻塞 Dart/平台线程。错误以 `FinditError` 返回，
 //! FRB 将其映射为 Dart 端可区分的异常。
 
+pub mod ai;
 pub mod boxes;
 pub mod categories;
 pub mod db;

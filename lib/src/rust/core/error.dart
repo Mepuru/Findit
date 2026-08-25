@@ -37,4 +37,16 @@ sealed class FinditError with _$FinditError implements FrbException {
 
   /// 文件 / 目录 IO 错误。
   const factory FinditError.io(String field0) = FinditError_Io;
+
+  /// AI 服务尚未配置（如未填写服务地址）。
+  const factory FinditError.aiNotConfigured(String field0) =
+      FinditError_AiNotConfigured;
+
+  /// 网络层不可达：连接失败 / 超时 / DNS 解析失败等。
+  const factory FinditError.aiUnreachable(String field0) =
+      FinditError_AiUnreachable;
+
+  /// 服务可达但返回内容异常：HTTP 错误状态、模型输出无法解析等。
+  const factory FinditError.aiModelOutput(String field0) =
+      FinditError_AiModelOutput;
 }

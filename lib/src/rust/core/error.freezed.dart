@@ -25,6 +25,9 @@ mixin _$FinditError {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? whenOrNull<TResult extends Object?>({
@@ -34,6 +37,9 @@ mixin _$FinditError {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeWhen<TResult extends Object?>({
@@ -43,6 +49,9 @@ mixin _$FinditError {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
@@ -54,6 +63,10 @@ mixin _$FinditError {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult? mapOrNull<TResult extends Object?>({
@@ -63,6 +76,9 @@ mixin _$FinditError {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) => throw _privateConstructorUsedError;
   @optionalTypeArgs
   TResult maybeMap<TResult extends Object?>({
@@ -72,6 +88,9 @@ mixin _$FinditError {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) => throw _privateConstructorUsedError;
 }
@@ -148,6 +167,9 @@ class _$FinditError_DbNotInitializedImpl extends FinditError_DbNotInitialized {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) {
     return dbNotInitialized();
   }
@@ -161,6 +183,9 @@ class _$FinditError_DbNotInitializedImpl extends FinditError_DbNotInitialized {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) {
     return dbNotInitialized?.call();
   }
@@ -174,6 +199,9 @@ class _$FinditError_DbNotInitializedImpl extends FinditError_DbNotInitialized {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (dbNotInitialized != null) {
@@ -192,6 +220,10 @@ class _$FinditError_DbNotInitializedImpl extends FinditError_DbNotInitialized {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) {
     return dbNotInitialized(this);
   }
@@ -205,6 +237,9 @@ class _$FinditError_DbNotInitializedImpl extends FinditError_DbNotInitialized {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) {
     return dbNotInitialized?.call(this);
   }
@@ -218,6 +253,9 @@ class _$FinditError_DbNotInitializedImpl extends FinditError_DbNotInitialized {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (dbNotInitialized != null) {
@@ -312,6 +350,9 @@ class _$FinditError_DbImpl extends FinditError_Db {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) {
     return db(field0);
   }
@@ -325,6 +366,9 @@ class _$FinditError_DbImpl extends FinditError_Db {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) {
     return db?.call(field0);
   }
@@ -338,6 +382,9 @@ class _$FinditError_DbImpl extends FinditError_Db {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (db != null) {
@@ -356,6 +403,10 @@ class _$FinditError_DbImpl extends FinditError_Db {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) {
     return db(this);
   }
@@ -369,6 +420,9 @@ class _$FinditError_DbImpl extends FinditError_Db {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) {
     return db?.call(this);
   }
@@ -382,6 +436,9 @@ class _$FinditError_DbImpl extends FinditError_Db {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (db != null) {
@@ -493,6 +550,9 @@ class _$FinditError_DuplicateNameImpl extends FinditError_DuplicateName {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) {
     return duplicateName(entity, name);
   }
@@ -506,6 +566,9 @@ class _$FinditError_DuplicateNameImpl extends FinditError_DuplicateName {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) {
     return duplicateName?.call(entity, name);
   }
@@ -519,6 +582,9 @@ class _$FinditError_DuplicateNameImpl extends FinditError_DuplicateName {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (duplicateName != null) {
@@ -537,6 +603,10 @@ class _$FinditError_DuplicateNameImpl extends FinditError_DuplicateName {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) {
     return duplicateName(this);
   }
@@ -550,6 +620,9 @@ class _$FinditError_DuplicateNameImpl extends FinditError_DuplicateName {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) {
     return duplicateName?.call(this);
   }
@@ -563,6 +636,9 @@ class _$FinditError_DuplicateNameImpl extends FinditError_DuplicateName {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (duplicateName != null) {
@@ -677,6 +753,9 @@ class _$FinditError_NotFoundImpl extends FinditError_NotFound {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) {
     return notFound(entity, hint);
   }
@@ -690,6 +769,9 @@ class _$FinditError_NotFoundImpl extends FinditError_NotFound {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) {
     return notFound?.call(entity, hint);
   }
@@ -703,6 +785,9 @@ class _$FinditError_NotFoundImpl extends FinditError_NotFound {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (notFound != null) {
@@ -721,6 +806,10 @@ class _$FinditError_NotFoundImpl extends FinditError_NotFound {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) {
     return notFound(this);
   }
@@ -734,6 +823,9 @@ class _$FinditError_NotFoundImpl extends FinditError_NotFound {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) {
     return notFound?.call(this);
   }
@@ -747,6 +839,9 @@ class _$FinditError_NotFoundImpl extends FinditError_NotFound {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (notFound != null) {
@@ -853,6 +948,9 @@ class _$FinditError_ValidationImpl extends FinditError_Validation {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) {
     return validation(field0);
   }
@@ -866,6 +964,9 @@ class _$FinditError_ValidationImpl extends FinditError_Validation {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) {
     return validation?.call(field0);
   }
@@ -879,6 +980,9 @@ class _$FinditError_ValidationImpl extends FinditError_Validation {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (validation != null) {
@@ -897,6 +1001,10 @@ class _$FinditError_ValidationImpl extends FinditError_Validation {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) {
     return validation(this);
   }
@@ -910,6 +1018,9 @@ class _$FinditError_ValidationImpl extends FinditError_Validation {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) {
     return validation?.call(this);
   }
@@ -923,6 +1034,9 @@ class _$FinditError_ValidationImpl extends FinditError_Validation {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (validation != null) {
@@ -1025,6 +1139,9 @@ class _$FinditError_IoImpl extends FinditError_Io {
     required TResult Function(String entity, String hint) notFound,
     required TResult Function(String field0) validation,
     required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
   }) {
     return io(field0);
   }
@@ -1038,6 +1155,9 @@ class _$FinditError_IoImpl extends FinditError_Io {
     TResult? Function(String entity, String hint)? notFound,
     TResult? Function(String field0)? validation,
     TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
   }) {
     return io?.call(field0);
   }
@@ -1051,6 +1171,9 @@ class _$FinditError_IoImpl extends FinditError_Io {
     TResult Function(String entity, String hint)? notFound,
     TResult Function(String field0)? validation,
     TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (io != null) {
@@ -1069,6 +1192,10 @@ class _$FinditError_IoImpl extends FinditError_Io {
     required TResult Function(FinditError_NotFound value) notFound,
     required TResult Function(FinditError_Validation value) validation,
     required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
   }) {
     return io(this);
   }
@@ -1082,6 +1209,9 @@ class _$FinditError_IoImpl extends FinditError_Io {
     TResult? Function(FinditError_NotFound value)? notFound,
     TResult? Function(FinditError_Validation value)? validation,
     TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
   }) {
     return io?.call(this);
   }
@@ -1095,6 +1225,9 @@ class _$FinditError_IoImpl extends FinditError_Io {
     TResult Function(FinditError_NotFound value)? notFound,
     TResult Function(FinditError_Validation value)? validation,
     TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
     required TResult orElse(),
   }) {
     if (io != null) {
@@ -1115,4 +1248,577 @@ abstract class FinditError_Io extends FinditError {
   @JsonKey(includeFromJson: false, includeToJson: false)
   _$$FinditError_IoImplCopyWith<_$FinditError_IoImpl> get copyWith =>
       throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class _$$FinditError_AiNotConfiguredImplCopyWith<$Res> {
+  factory _$$FinditError_AiNotConfiguredImplCopyWith(
+    _$FinditError_AiNotConfiguredImpl value,
+    $Res Function(_$FinditError_AiNotConfiguredImpl) then,
+  ) = __$$FinditError_AiNotConfiguredImplCopyWithImpl<$Res>;
+  @useResult
+  $Res call({String field0});
+}
+
+/// @nodoc
+class __$$FinditError_AiNotConfiguredImplCopyWithImpl<$Res>
+    extends _$FinditErrorCopyWithImpl<$Res, _$FinditError_AiNotConfiguredImpl>
+    implements _$$FinditError_AiNotConfiguredImplCopyWith<$Res> {
+  __$$FinditError_AiNotConfiguredImplCopyWithImpl(
+    _$FinditError_AiNotConfiguredImpl _value,
+    $Res Function(_$FinditError_AiNotConfiguredImpl) _then,
+  ) : super(_value, _then);
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _$FinditError_AiNotConfiguredImpl(
+        null == field0
+            ? _value.field0
+            : field0 // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
+  }
+}
+
+/// @nodoc
+
+class _$FinditError_AiNotConfiguredImpl extends FinditError_AiNotConfigured {
+  const _$FinditError_AiNotConfiguredImpl(this.field0) : super._();
+
+  @override
+  final String field0;
+
+  @override
+  String toString() {
+    return 'FinditError.aiNotConfigured(field0: $field0)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$FinditError_AiNotConfiguredImpl &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$FinditError_AiNotConfiguredImplCopyWith<_$FinditError_AiNotConfiguredImpl>
+  get copyWith =>
+      __$$FinditError_AiNotConfiguredImplCopyWithImpl<
+        _$FinditError_AiNotConfiguredImpl
+      >(this, _$identity);
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() dbNotInitialized,
+    required TResult Function(String field0) db,
+    required TResult Function(String entity, String name) duplicateName,
+    required TResult Function(String entity, String hint) notFound,
+    required TResult Function(String field0) validation,
+    required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
+  }) {
+    return aiNotConfigured(field0);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? dbNotInitialized,
+    TResult? Function(String field0)? db,
+    TResult? Function(String entity, String name)? duplicateName,
+    TResult? Function(String entity, String hint)? notFound,
+    TResult? Function(String field0)? validation,
+    TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
+  }) {
+    return aiNotConfigured?.call(field0);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? dbNotInitialized,
+    TResult Function(String field0)? db,
+    TResult Function(String entity, String name)? duplicateName,
+    TResult Function(String entity, String hint)? notFound,
+    TResult Function(String field0)? validation,
+    TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
+    required TResult orElse(),
+  }) {
+    if (aiNotConfigured != null) {
+      return aiNotConfigured(field0);
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(FinditError_DbNotInitialized value)
+    dbNotInitialized,
+    required TResult Function(FinditError_Db value) db,
+    required TResult Function(FinditError_DuplicateName value) duplicateName,
+    required TResult Function(FinditError_NotFound value) notFound,
+    required TResult Function(FinditError_Validation value) validation,
+    required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
+  }) {
+    return aiNotConfigured(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(FinditError_DbNotInitialized value)? dbNotInitialized,
+    TResult? Function(FinditError_Db value)? db,
+    TResult? Function(FinditError_DuplicateName value)? duplicateName,
+    TResult? Function(FinditError_NotFound value)? notFound,
+    TResult? Function(FinditError_Validation value)? validation,
+    TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
+  }) {
+    return aiNotConfigured?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(FinditError_DbNotInitialized value)? dbNotInitialized,
+    TResult Function(FinditError_Db value)? db,
+    TResult Function(FinditError_DuplicateName value)? duplicateName,
+    TResult Function(FinditError_NotFound value)? notFound,
+    TResult Function(FinditError_Validation value)? validation,
+    TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
+    required TResult orElse(),
+  }) {
+    if (aiNotConfigured != null) {
+      return aiNotConfigured(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class FinditError_AiNotConfigured extends FinditError {
+  const factory FinditError_AiNotConfigured(String field0) =
+      _$FinditError_AiNotConfiguredImpl;
+  const FinditError_AiNotConfigured._() : super._();
+
+  String get field0;
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  _$$FinditError_AiNotConfiguredImplCopyWith<_$FinditError_AiNotConfiguredImpl>
+  get copyWith => throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class _$$FinditError_AiUnreachableImplCopyWith<$Res> {
+  factory _$$FinditError_AiUnreachableImplCopyWith(
+    _$FinditError_AiUnreachableImpl value,
+    $Res Function(_$FinditError_AiUnreachableImpl) then,
+  ) = __$$FinditError_AiUnreachableImplCopyWithImpl<$Res>;
+  @useResult
+  $Res call({String field0});
+}
+
+/// @nodoc
+class __$$FinditError_AiUnreachableImplCopyWithImpl<$Res>
+    extends _$FinditErrorCopyWithImpl<$Res, _$FinditError_AiUnreachableImpl>
+    implements _$$FinditError_AiUnreachableImplCopyWith<$Res> {
+  __$$FinditError_AiUnreachableImplCopyWithImpl(
+    _$FinditError_AiUnreachableImpl _value,
+    $Res Function(_$FinditError_AiUnreachableImpl) _then,
+  ) : super(_value, _then);
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _$FinditError_AiUnreachableImpl(
+        null == field0
+            ? _value.field0
+            : field0 // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
+  }
+}
+
+/// @nodoc
+
+class _$FinditError_AiUnreachableImpl extends FinditError_AiUnreachable {
+  const _$FinditError_AiUnreachableImpl(this.field0) : super._();
+
+  @override
+  final String field0;
+
+  @override
+  String toString() {
+    return 'FinditError.aiUnreachable(field0: $field0)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$FinditError_AiUnreachableImpl &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$FinditError_AiUnreachableImplCopyWith<_$FinditError_AiUnreachableImpl>
+  get copyWith =>
+      __$$FinditError_AiUnreachableImplCopyWithImpl<
+        _$FinditError_AiUnreachableImpl
+      >(this, _$identity);
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() dbNotInitialized,
+    required TResult Function(String field0) db,
+    required TResult Function(String entity, String name) duplicateName,
+    required TResult Function(String entity, String hint) notFound,
+    required TResult Function(String field0) validation,
+    required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
+  }) {
+    return aiUnreachable(field0);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? dbNotInitialized,
+    TResult? Function(String field0)? db,
+    TResult? Function(String entity, String name)? duplicateName,
+    TResult? Function(String entity, String hint)? notFound,
+    TResult? Function(String field0)? validation,
+    TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
+  }) {
+    return aiUnreachable?.call(field0);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? dbNotInitialized,
+    TResult Function(String field0)? db,
+    TResult Function(String entity, String name)? duplicateName,
+    TResult Function(String entity, String hint)? notFound,
+    TResult Function(String field0)? validation,
+    TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
+    required TResult orElse(),
+  }) {
+    if (aiUnreachable != null) {
+      return aiUnreachable(field0);
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(FinditError_DbNotInitialized value)
+    dbNotInitialized,
+    required TResult Function(FinditError_Db value) db,
+    required TResult Function(FinditError_DuplicateName value) duplicateName,
+    required TResult Function(FinditError_NotFound value) notFound,
+    required TResult Function(FinditError_Validation value) validation,
+    required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
+  }) {
+    return aiUnreachable(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(FinditError_DbNotInitialized value)? dbNotInitialized,
+    TResult? Function(FinditError_Db value)? db,
+    TResult? Function(FinditError_DuplicateName value)? duplicateName,
+    TResult? Function(FinditError_NotFound value)? notFound,
+    TResult? Function(FinditError_Validation value)? validation,
+    TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
+  }) {
+    return aiUnreachable?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(FinditError_DbNotInitialized value)? dbNotInitialized,
+    TResult Function(FinditError_Db value)? db,
+    TResult Function(FinditError_DuplicateName value)? duplicateName,
+    TResult Function(FinditError_NotFound value)? notFound,
+    TResult Function(FinditError_Validation value)? validation,
+    TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
+    required TResult orElse(),
+  }) {
+    if (aiUnreachable != null) {
+      return aiUnreachable(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class FinditError_AiUnreachable extends FinditError {
+  const factory FinditError_AiUnreachable(String field0) =
+      _$FinditError_AiUnreachableImpl;
+  const FinditError_AiUnreachable._() : super._();
+
+  String get field0;
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  _$$FinditError_AiUnreachableImplCopyWith<_$FinditError_AiUnreachableImpl>
+  get copyWith => throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class _$$FinditError_AiModelOutputImplCopyWith<$Res> {
+  factory _$$FinditError_AiModelOutputImplCopyWith(
+    _$FinditError_AiModelOutputImpl value,
+    $Res Function(_$FinditError_AiModelOutputImpl) then,
+  ) = __$$FinditError_AiModelOutputImplCopyWithImpl<$Res>;
+  @useResult
+  $Res call({String field0});
+}
+
+/// @nodoc
+class __$$FinditError_AiModelOutputImplCopyWithImpl<$Res>
+    extends _$FinditErrorCopyWithImpl<$Res, _$FinditError_AiModelOutputImpl>
+    implements _$$FinditError_AiModelOutputImplCopyWith<$Res> {
+  __$$FinditError_AiModelOutputImplCopyWithImpl(
+    _$FinditError_AiModelOutputImpl _value,
+    $Res Function(_$FinditError_AiModelOutputImpl) _then,
+  ) : super(_value, _then);
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({Object? field0 = null}) {
+    return _then(
+      _$FinditError_AiModelOutputImpl(
+        null == field0
+            ? _value.field0
+            : field0 // ignore: cast_nullable_to_non_nullable
+                  as String,
+      ),
+    );
+  }
+}
+
+/// @nodoc
+
+class _$FinditError_AiModelOutputImpl extends FinditError_AiModelOutput {
+  const _$FinditError_AiModelOutputImpl(this.field0) : super._();
+
+  @override
+  final String field0;
+
+  @override
+  String toString() {
+    return 'FinditError.aiModelOutput(field0: $field0)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$FinditError_AiModelOutputImpl &&
+            (identical(other.field0, field0) || other.field0 == field0));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, field0);
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$FinditError_AiModelOutputImplCopyWith<_$FinditError_AiModelOutputImpl>
+  get copyWith =>
+      __$$FinditError_AiModelOutputImplCopyWithImpl<
+        _$FinditError_AiModelOutputImpl
+      >(this, _$identity);
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() dbNotInitialized,
+    required TResult Function(String field0) db,
+    required TResult Function(String entity, String name) duplicateName,
+    required TResult Function(String entity, String hint) notFound,
+    required TResult Function(String field0) validation,
+    required TResult Function(String field0) io,
+    required TResult Function(String field0) aiNotConfigured,
+    required TResult Function(String field0) aiUnreachable,
+    required TResult Function(String field0) aiModelOutput,
+  }) {
+    return aiModelOutput(field0);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? dbNotInitialized,
+    TResult? Function(String field0)? db,
+    TResult? Function(String entity, String name)? duplicateName,
+    TResult? Function(String entity, String hint)? notFound,
+    TResult? Function(String field0)? validation,
+    TResult? Function(String field0)? io,
+    TResult? Function(String field0)? aiNotConfigured,
+    TResult? Function(String field0)? aiUnreachable,
+    TResult? Function(String field0)? aiModelOutput,
+  }) {
+    return aiModelOutput?.call(field0);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? dbNotInitialized,
+    TResult Function(String field0)? db,
+    TResult Function(String entity, String name)? duplicateName,
+    TResult Function(String entity, String hint)? notFound,
+    TResult Function(String field0)? validation,
+    TResult Function(String field0)? io,
+    TResult Function(String field0)? aiNotConfigured,
+    TResult Function(String field0)? aiUnreachable,
+    TResult Function(String field0)? aiModelOutput,
+    required TResult orElse(),
+  }) {
+    if (aiModelOutput != null) {
+      return aiModelOutput(field0);
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(FinditError_DbNotInitialized value)
+    dbNotInitialized,
+    required TResult Function(FinditError_Db value) db,
+    required TResult Function(FinditError_DuplicateName value) duplicateName,
+    required TResult Function(FinditError_NotFound value) notFound,
+    required TResult Function(FinditError_Validation value) validation,
+    required TResult Function(FinditError_Io value) io,
+    required TResult Function(FinditError_AiNotConfigured value)
+    aiNotConfigured,
+    required TResult Function(FinditError_AiUnreachable value) aiUnreachable,
+    required TResult Function(FinditError_AiModelOutput value) aiModelOutput,
+  }) {
+    return aiModelOutput(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(FinditError_DbNotInitialized value)? dbNotInitialized,
+    TResult? Function(FinditError_Db value)? db,
+    TResult? Function(FinditError_DuplicateName value)? duplicateName,
+    TResult? Function(FinditError_NotFound value)? notFound,
+    TResult? Function(FinditError_Validation value)? validation,
+    TResult? Function(FinditError_Io value)? io,
+    TResult? Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult? Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult? Function(FinditError_AiModelOutput value)? aiModelOutput,
+  }) {
+    return aiModelOutput?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(FinditError_DbNotInitialized value)? dbNotInitialized,
+    TResult Function(FinditError_Db value)? db,
+    TResult Function(FinditError_DuplicateName value)? duplicateName,
+    TResult Function(FinditError_NotFound value)? notFound,
+    TResult Function(FinditError_Validation value)? validation,
+    TResult Function(FinditError_Io value)? io,
+    TResult Function(FinditError_AiNotConfigured value)? aiNotConfigured,
+    TResult Function(FinditError_AiUnreachable value)? aiUnreachable,
+    TResult Function(FinditError_AiModelOutput value)? aiModelOutput,
+    required TResult orElse(),
+  }) {
+    if (aiModelOutput != null) {
+      return aiModelOutput(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class FinditError_AiModelOutput extends FinditError {
+  const factory FinditError_AiModelOutput(String field0) =
+      _$FinditError_AiModelOutputImpl;
+  const FinditError_AiModelOutput._() : super._();
+
+  String get field0;
+
+  /// Create a copy of FinditError
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  _$$FinditError_AiModelOutputImplCopyWith<_$FinditError_AiModelOutputImpl>
+  get copyWith => throw _privateConstructorUsedError;
 }

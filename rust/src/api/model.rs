@@ -1,4 +1,8 @@
 //! FRB 镜像的数据模型（Dart 端可见）。
+//!
+//! 说明：AI 相关的部分模型（`AiConfig` / `AiProvider` / `ParsedIntent` /
+//! `EntityRef` / `QuickAddResult` / `ModifyResult`）直接定义在 `core::ai`
+//! 子模块中，FRB 会随 API 签名一并镜像。
 
 /// 存储单元（如“客厅柜子”“储藏室货架”）。
 #[derive(Debug, Clone, PartialEq)]
@@ -81,4 +85,50 @@ pub struct SearchResult {
     pub matched_by: MatchedBy,
     /// 语义命中时的相似度百分比（0-100）；关键词命中为 `None`。
     pub similarity_percent: Option<i32>,
+}
+
+/// AI 连接探活结果：对话与向量各自可用性 + 错误信息。
+#[derive(Debug, Clone, PartialEq)]
+pub struct AiTestResult {
+    pub chat_ok: bool,
+    pub chat_message: String,
+    pub embed_ok: bool,
+    pub embed_message: String,
+}
+
+/// AI 总体状态：配置概要 + 短缓存的探活结果。
+#[derive(Debug, Clone, PartialEq)]
+pub struct AiStatus {
+    /// 服务地址非空即视为已配置。
+    pub configured: bool,
+    pub provider: crate::core::ai::config::AiProvider,
+    pub base_url: String,
+    pub chat_model: String,
+    pub embed_model: String,
+    /// 库存向量实际使用的模型名（未回填过为 `None`）。
+    pub embedded_model: Option<String>,
+    /// 库存向量维度。
+    pub embedded_dim: Option<i64>,
+    /// 待回填物品数。
+    pub pending_embeddings: i64,
+    /// 缓存探活：对话可用性（未探活为 `None`）。
+    pub last_chat_ok: Option<bool>,
+    /// 缓存探活：向量可用性。
+    pub last_embed_ok: Option<bool>,
+    /// 缓存探活距今秒数（无缓存为 `None`）。
+    pub cache_age_secs: Option<i64>,
+}
+
+/// 向量重建进度（流式推送）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmbedProgress {
+    pub done: i32,
+    pub total: i32,
+}
+
+/// 向量重建汇总。
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmbedProgressSummary {
+    pub processed: i32,
+    pub total: i32,
 }
