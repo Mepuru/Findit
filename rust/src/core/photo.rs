@@ -121,6 +121,20 @@ pub fn delete_photo_files(photos_dir: &Path, main_file_name: &str) -> FinditResu
     Ok(())
 }
 
+/// 尽力清理一批 `photo_path` 对应的主图与缩略图文件（供级联删除后调用）。
+/// 任何失败仅记录日志不阻断：数据库事务已提交，残留文件不影响数据一致性。
+pub fn cleanup_photo_paths_best_effort(photo_paths: &[String]) {
+    let dir = match db::photos_dir() {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+    for path in photo_paths {
+        if let Err(e) = delete_photo_files(&dir, path) {
+            eprintln!("[findit] 清理照片文件失败 {path}：{e}");
+        }
+    }
+}
+
 /// 主图完整路径（供 Dart 侧用 `File` 直接加载）。
 pub fn photo_full_path(file_name: &str) -> FinditResult<String> {
     validate_file_name(file_name)?;

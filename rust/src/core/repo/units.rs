@@ -128,6 +128,7 @@ pub fn update_unit(
 }
 
 /// 删除存储单元，级联删除其下所有收纳箱、物品及物品分类关联（显式事务）。
+/// 事务提交成功后尽力清理子树物品的照片文件（失败仅记日志不阻断）。
 pub fn delete_unit(conn: &Connection, id: i64) -> FinditResult<()> {
     let tx = conn.unchecked_transaction()?;
 
@@ -142,6 +143,16 @@ pub fn delete_unit(conn: &Connection, id: i64) -> FinditResult<()> {
             hint: format!("id={id}"),
         });
     }
+
+    // 删除前收集子树物品的照片路径，供提交后清理文件。
+    let photos: Vec<String> = tx
+        .prepare(
+            "SELECT photo_path FROM items \
+             WHERE box_id IN (SELECT id FROM storage_boxes WHERE unit_id = ?1) \
+             AND photo_path IS NOT NULL",
+        )?
+        .query_map(params![id], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
 
     // 该单元下的全部箱子（先删子表，避免外键约束下删父表失败）
     let box_ids: Vec<i64> = tx
@@ -162,6 +173,7 @@ pub fn delete_unit(conn: &Connection, id: i64) -> FinditResult<()> {
     tx.execute("DELETE FROM storage_units WHERE id = ?1", params![id])?;
 
     tx.commit()?;
+    crate::core::photo::cleanup_photo_paths_best_effort(&photos);
     Ok(())
 }
 

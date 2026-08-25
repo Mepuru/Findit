@@ -207,6 +207,7 @@ pub fn update_box(
 }
 
 /// 删除收纳箱，级联删除箱内全部物品及其分类关联（显式事务）。
+/// 事务提交成功后尽力清理箱内物品的照片文件（失败仅记日志不阻断）。
 pub fn delete_box(conn: &Connection, id: i64) -> FinditResult<()> {
     let tx = conn.unchecked_transaction()?;
 
@@ -222,6 +223,14 @@ pub fn delete_box(conn: &Connection, id: i64) -> FinditResult<()> {
         });
     }
 
+    // 删除前收集箱内物品的照片路径，供提交后清理文件。
+    let photos: Vec<String> = tx
+        .prepare(
+            "SELECT photo_path FROM items WHERE box_id = ?1 AND photo_path IS NOT NULL",
+        )?
+        .query_map(params![id], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+
     // 先删子表（分类关联、物品），再删箱子本身，避免外键约束冲突。
     tx.execute(
         "DELETE FROM item_categories WHERE item_id IN \
@@ -232,6 +241,7 @@ pub fn delete_box(conn: &Connection, id: i64) -> FinditResult<()> {
     tx.execute("DELETE FROM storage_boxes WHERE id = ?1", params![id])?;
 
     tx.commit()?;
+    crate::core::photo::cleanup_photo_paths_best_effort(&photos);
     Ok(())
 }
 
