@@ -59,6 +59,8 @@ class _FinditAppState extends State<FinditApp> {
       title: 'Findit',
       debugShowCheckedModeBanner: false,
       theme: finditTheme,
+      darkTheme: finditDarkTheme,
+      themeMode: ThemeMode.system,
       home: switch (_boot) {
         _BootState.loading => const _BootPage(),
         _BootState.failed => _BootErrorPage(

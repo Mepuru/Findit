@@ -18,6 +18,9 @@ String? parseFinditBoxSlug(String raw) {
   return slug.isEmpty ? null : slug;
 }
 
+/// 扫码页无论亮/暗主题都保持深绿相机底色（沉浸式取景），固定不随主题变。
+const Color _scanBackdrop = Color(0xFF24473D);
+
 /// 扫码页：对准箱标签二维码，匹配 `findit://box/{slug}` 后直达对应收纳箱。
 class ScanPage extends StatefulWidget {
   const ScanPage({super.key});
@@ -78,7 +81,6 @@ class _ScanPageState extends State<ScanPage> {
       SnackBar(
         content: Text(message),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: const Color(0xFF3A2E28),
       ),
     );
   }
@@ -92,7 +94,7 @@ class _ScanPageState extends State<ScanPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: FinditColors.pineDeep,
+      backgroundColor: _scanBackdrop,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -166,7 +168,7 @@ class _ScanFrame extends StatelessWidget {
           children: [
             ColorFiltered(
               colorFilter: ColorFilter.mode(
-                FinditColors.pineDeep.withValues(alpha: 0.55),
+                _scanBackdrop.withValues(alpha: 0.55),
                 BlendMode.srcOut,
               ),
               child: Stack(
@@ -253,7 +255,7 @@ class _Corner extends StatelessWidget {
         width: corner,
         height: corner,
         decoration: BoxDecoration(
-          border: Border.all(color: FinditColors.persimmon, width: 4),
+          border: Border.all(color: context.palette.persimmon, width: 4),
           borderRadius: radius,
         ),
       ),

@@ -183,6 +183,7 @@ class _QuickAddPageState extends State<QuickAddPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Scaffold(
       appBar: AppBar(title: const Text('AI 快速录入')),
       body: ListView(
@@ -193,10 +194,10 @@ class _QuickAddPageState extends State<QuickAddPage> {
             style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             '如「把电钻放进车库的蓝色箱子」「把扳手移到杂物箱，数量改成 2」。'
             '也可以把语音转文字的结果粘贴进来。',
-            style: TextStyle(fontSize: 13, color: FinditColors.inkSoft),
+            style: TextStyle(fontSize: 13, color: palette.inkSoft),
           ),
           const SizedBox(height: 16),
           _buildPhaseBody(),
@@ -216,10 +217,10 @@ class _QuickAddPageState extends State<QuickAddPage> {
               controller: _inputController,
               maxLines: 3,
               enabled: _phase == _Phase.input,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: '输入一句话，如：把电钻放进车库的蓝色箱子',
                 filled: true,
-                fillColor: FinditColors.cardFace,
+                fillColor: context.palette.cardFace,
               ),
               onSubmitted: (_) {
                 if (_phase == _Phase.input) _parse();
@@ -342,7 +343,7 @@ class _QuickAddPageState extends State<QuickAddPage> {
           hintText: hint.isEmpty ? null : hint,
           isDense: true,
           filled: true,
-          fillColor: FinditColors.cardFace,
+          fillColor: context.palette.cardFace,
         ),
       ),
     );
@@ -378,9 +379,10 @@ class _PreviewCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               '请核对以下字段，可直接修改后再保存。带 * 的必填。',
-              style: TextStyle(fontSize: 12, color: FinditColors.inkSoft),
+              style: TextStyle(
+                  fontSize: 12, color: context.palette.inkSoft),
             ),
             const SizedBox(height: 12),
             SegmentedButton<IntentKind>(
@@ -422,16 +424,17 @@ class _ErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: FinditColors.danger.withValues(alpha: 0.08),
+        color: palette.danger.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: FinditColors.danger.withValues(alpha: 0.35)),
+        border: Border.all(color: palette.danger.withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.error_outline, color: FinditColors.danger),
+          Icon(Icons.error_outline, color: palette.danger),
           const SizedBox(width: 10),
           Expanded(
             child: Text(

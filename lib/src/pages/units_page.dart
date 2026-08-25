@@ -122,17 +122,17 @@ class _UnitsPageState extends State<UnitsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Findit'),
+            const Text('Findit'),
             Text(
               '家庭收纳档案',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w500,
                 letterSpacing: 2,
-                color: FinditColors.inkSoft,
+                color: context.palette.inkSoft,
               ),
             ),
           ],
@@ -222,6 +222,7 @@ class _UnitCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -235,7 +236,7 @@ class _UnitCard extends StatelessWidget {
                 height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: FinditColors.chipFill,
+                  color: palette.chipFill,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text('🗄️', style: TextStyle(fontSize: 22)),
@@ -256,7 +257,7 @@ class _UnitCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                              color: FinditColors.inkSoft,
+                              color: palette.inkSoft,
                             ),
                       ),
                     ],
@@ -270,13 +271,13 @@ class _UnitCard extends StatelessWidget {
                   if (value == 'edit') onEdit();
                   if (value == 'delete') onDelete();
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'edit', child: Text('编辑')),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('编辑')),
                   PopupMenuItem(
                     value: 'delete',
                     child: Text(
                       '删除',
-                      style: TextStyle(color: FinditColors.danger),
+                      style: TextStyle(color: palette.danger),
                     ),
                   ),
                 ],

@@ -170,6 +170,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Scaffold(
       appBar: AppBar(title: const Text('AI 设置')),
       body: _loading
@@ -202,13 +203,13 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                         const SizedBox(height: 14),
                         TextField(
                           controller: _baseUrl,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '服务地址',
                             hintText:
                                 'http://10.0.2.2:11434（模拟器）或局域网电脑地址',
                             isDense: true,
                             filled: true,
-                            fillColor: FinditColors.cardFace,
+                            fillColor: palette.cardFace,
                           ),
                           keyboardType: TextInputType.url,
                         ),
@@ -217,34 +218,34 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                           TextField(
                             controller: _apiKey,
                             obscureText: true,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'API Key',
                               isDense: true,
                               filled: true,
-                              fillColor: FinditColors.cardFace,
+                              fillColor: palette.cardFace,
                             ),
                           ),
                         ],
                         const SizedBox(height: 10),
                         TextField(
                           controller: _chatModel,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '对话模型',
                             hintText: '如：qwen3:4b',
                             isDense: true,
                             filled: true,
-                            fillColor: FinditColors.cardFace,
+                            fillColor: palette.cardFace,
                           ),
                         ),
                         const SizedBox(height: 10),
                         TextField(
                           controller: _embedModel,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: '向量模型',
                             hintText: '如：nomic-embed-text',
                             isDense: true,
                             filled: true,
-                            fillColor: FinditColors.cardFace,
+                            fillColor: palette.cardFace,
                           ),
                         ),
                         const SizedBox(height: 14),
@@ -308,9 +309,9 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                           const SizedBox(height: 6),
                           Text(
                             '正在重建：${_rebuildProgress!.done}/${_rebuildProgress!.total}',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
-                              color: FinditColors.inkSoft,
+                              color: palette.inkSoft,
                             ),
                           ),
                           const SizedBox(height: 12),
@@ -341,11 +342,11 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        const Text(
+                        Text(
                           '更换向量模型或维度变化时请先重建；补齐只处理尚未生成向量的物品。',
                           style: TextStyle(
                             fontSize: 12,
-                            color: FinditColors.inkSoft,
+                            color: palette.inkSoft,
                           ),
                         ),
                       ],
@@ -363,7 +364,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelSmall!.copyWith(
-              color: FinditColors.pineDeep,
+              color: context.palette.pineDeep,
               letterSpacing: 1.6,
             ),
       ),
@@ -387,7 +388,8 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
   }
 
   Widget _testRow(String label, bool ok, String message) {
-    final color = ok ? FinditColors.pineDeep : FinditColors.danger;
+    final palette = context.palette;
+    final color = ok ? palette.pineDeep : palette.danger;
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Row(

@@ -100,6 +100,7 @@ class _SearchPageState extends State<SearchPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Scaffold(
       appBar: AppBar(
         title: const Text('搜索'),
@@ -131,10 +132,10 @@ class _SearchPageState extends State<SearchPage> {
               },
               decoration: InputDecoration(
                 hintText: '找什么？如：扳手、冬装、蓝色 箱子',
-                prefixIcon: const Icon(Icons.search_rounded,
-                    color: FinditColors.inkSoft),
+                prefixIcon:
+                    Icon(Icons.search_rounded, color: palette.inkSoft),
                 filled: true,
-                fillColor: FinditColors.cardFace,
+                fillColor: palette.cardFace,
               ),
             ),
           ),
@@ -207,6 +208,7 @@ class _IdleHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 48),
       children: [
@@ -218,9 +220,9 @@ class _IdleHint extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        const Text(
+        Text(
           '输入物品名称、描述或分类，空格分隔多个词。',
-          style: TextStyle(fontSize: 13, color: FinditColors.inkSoft),
+          style: TextStyle(fontSize: 13, color: palette.inkSoft),
         ),
         const SizedBox(height: 20),
         _hintRow('🧰', '试试搜「工具」', '命中分类名同样有效'),
@@ -234,36 +236,41 @@ class _IdleHint extends StatelessWidget {
   Widget _hintRow(String emoji, String title, String subtitle) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: FinditColors.chipFill,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(emoji, style: const TextStyle(fontSize: 20)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title,
-                    style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                      fontSize: 12, color: FinditColors.inkSoft),
+      child: Builder(
+        builder: (context) {
+          final palette = context.palette;
+          return Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.chipFill,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
-            ),
-          ),
-        ],
+                child: Text(emoji, style: const TextStyle(fontSize: 20)),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title,
+                        style: const TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                          fontSize: 12, color: palette.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -285,7 +292,7 @@ class _SectionHeader extends StatelessWidget {
           Text(
             '$label · $count',
             style: Theme.of(context).textTheme.labelSmall!.copyWith(
-                  color: FinditColors.pineDeep,
+                  color: context.palette.pineDeep,
                   letterSpacing: 1.6,
                 ),
           ),
@@ -304,7 +311,7 @@ class _DashedLine extends StatelessWidget {
   Widget build(BuildContext context) {
     return CustomPaint(
       size: const Size.fromHeight(1),
-      painter: _DashPainter(color: FinditColors.cardLine),
+      painter: _DashPainter(color: context.palette.cardLine),
     );
   }
 }
@@ -346,6 +353,7 @@ class _ResultCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final isSemantic = result.matchedBy == MatchedBy.semantic;
     return Card(
       child: InkWell(
@@ -368,7 +376,7 @@ class _ResultCard extends StatelessWidget {
                     _SimilarityBadge(percent: result.similarityPercent!),
                   if (!isSemantic)
                     Icon(Icons.chevron_right_rounded,
-                        color: FinditColors.inkSoft.withValues(alpha: 0.6)),
+                        color: palette.inkSoft.withValues(alpha: 0.6)),
                 ],
               ),
               if (result.description.isNotEmpty) ...[
@@ -378,7 +386,7 @@ class _ResultCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                        color: FinditColors.inkSoft,
+                        color: palette.inkSoft,
                       ),
                 ),
               ],
@@ -415,7 +423,7 @@ class _SimilarityBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: FinditColors.persimmon,
+        color: context.palette.persimmon,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Row(
@@ -446,18 +454,19 @@ class _TagChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: FinditColors.pine.withValues(alpha: 0.45)),
+        border: Border.all(color: palette.pine.withValues(alpha: 0.55)),
       ),
       child: Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: FinditColors.pineDeep,
+          color: palette.pineDeep,
         ),
       ),
     );
@@ -472,27 +481,27 @@ class _LocationChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: FinditColors.chipFill,
+        color: palette.chipFill,
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.place_outlined,
-              size: 12, color: FinditColors.inkSoft),
+          Icon(Icons.place_outlined, size: 12, color: palette.inkSoft),
           const SizedBox(width: 3),
           Flexible(
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: FinditColors.inkSoft,
+                color: palette.inkSoft,
               ),
             ),
           ),

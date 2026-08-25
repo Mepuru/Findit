@@ -91,11 +91,6 @@ class _ItemsPageState extends State<ItemsPage> {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: FinditColors.cardFace,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-        side: BorderSide(color: FinditColors.cardLine),
-      ),
       builder: (sheetContext) => _ItemFormSheet(
         item: item,
         onPhotoChanged: _reload,
@@ -250,12 +245,12 @@ class _ItemCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
-  Widget get _tagIcon => Container(
+  Widget _tagIcon(BuildContext context) => Container(
         width: 42,
         height: 42,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: FinditColors.persimmon.withValues(alpha: 0.14),
+          color: context.palette.persimmon.withValues(alpha: 0.18),
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Text('🏷️', style: TextStyle(fontSize: 22)),
@@ -263,6 +258,7 @@ class _ItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final thumb = photoThumb;
     return Card(
       child: InkWell(
@@ -282,12 +278,13 @@ class _ItemCard extends StatelessWidget {
                       width: 42,
                       height: 42,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => _tagIcon,
+                      errorBuilder: (context, error, stackTrace) =>
+                          _tagIcon(context),
                     ),
                   ),
                 )
               else
-                _tagIcon,
+                _tagIcon(context),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -309,7 +306,7 @@ class _ItemCard extends StatelessWidget {
                           style: Theme.of(context)
                               .textTheme
                               .labelSmall!
-                              .copyWith(color: FinditColors.persimmon),
+                              .copyWith(color: palette.persimmon),
                         ),
                       ],
                     ),
@@ -324,7 +321,7 @@ class _ItemCard extends StatelessWidget {
                         style: Theme.of(context)
                             .textTheme
                             .bodySmall!
-                            .copyWith(color: FinditColors.inkSoft),
+                            .copyWith(color: palette.inkSoft),
                       )
                     else
                       Wrap(
@@ -336,7 +333,7 @@ class _ItemCard extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
-                                color: FinditColors.chipFill,
+                                color: palette.chipFill,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -345,7 +342,7 @@ class _ItemCard extends StatelessWidget {
                                     .textTheme
                                     .labelSmall!
                                     .copyWith(
-                                      color: FinditColors.pineDeep,
+                                      color: palette.pineDeep,
                                       letterSpacing: 0.2,
                                     ),
                               ),
@@ -361,13 +358,13 @@ class _ItemCard extends StatelessWidget {
                   if (value == 'edit') onEdit();
                   if (value == 'delete') onDelete();
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'edit', child: Text('编辑')),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('编辑')),
                   PopupMenuItem(
                     value: 'delete',
                     child: Text(
                       '删除',
-                      style: TextStyle(color: FinditColors.danger),
+                      style: TextStyle(color: palette.danger),
                     ),
                   ),
                 ],
@@ -580,6 +577,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
 
   /// 照片区：左侧缩略图（可点大图）+ 右侧操作按钮。
   Widget _buildPhotoArea() {
+    final palette = context.palette;
     final fileName = _photoPath;
     final thumbFuture = _thumbFuture;
     return Row(
@@ -591,9 +589,9 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
             width: 88,
             height: 88,
             decoration: BoxDecoration(
-              color: FinditColors.chipFill,
+              color: palette.chipFill,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: FinditColors.cardLine),
+              border: Border.all(color: palette.cardLine),
             ),
             clipBehavior: Clip.antiAlias,
             child: fileName != null && thumbFuture != null
@@ -612,17 +610,16 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                       return Image.file(
                         File(snap.data!),
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
+                        errorBuilder: (context, error, stackTrace) => Icon(
                           Icons.broken_image_outlined,
-                          color: FinditColors.inkSoft,
+                          color: palette.inkSoft,
                         ),
                       );
                     },
                   )
-                : const Icon(
+                : Icon(
                     Icons.photo_camera_outlined,
-                    color: FinditColors.inkSoft,
+                    color: palette.inkSoft,
                   ),
           ),
         ),
@@ -652,14 +649,14 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                   if (fileName != null)
                     TextButton.icon(
                       onPressed: _photoBusy ? null : _deletePhoto,
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.delete_outline_rounded,
                         size: 16,
-                        color: FinditColors.danger,
+                        color: palette.danger,
                       ),
-                      label: const Text(
+                      label: Text(
                         '删除',
-                        style: TextStyle(color: FinditColors.danger),
+                        style: TextStyle(color: palette.danger),
                       ),
                     ),
                 ],
@@ -669,7 +666,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                 Text(
                   '正在压缩保存…',
                   style: Theme.of(context).textTheme.labelSmall!.copyWith(
-                        color: FinditColors.inkSoft,
+                        color: palette.inkSoft,
                       ),
                 ),
               ],
@@ -691,6 +688,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final isEdit = widget.item != null;
     return Padding(
       padding: EdgeInsets.only(
@@ -709,7 +707,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                 width: 36,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: FinditColors.cardLine,
+                  color: palette.cardLine,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -729,7 +727,7 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
               Text(
                 '保存物品后可在编辑页拍照留档。',
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: FinditColors.inkSoft,
+                      color: palette.inkSoft,
                     ),
               ),
               const SizedBox(height: 16),
@@ -765,14 +763,14 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
               Text(
                 '分类加载失败：${friendlyErrorMessage(_categoriesError!)}',
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: FinditColors.danger,
+                      color: palette.danger,
                     ),
               )
             else if (_categories.isEmpty)
               Text(
                 '还没有分类，在下方输入框新建一个吧。',
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: FinditColors.inkSoft,
+                      color: palette.inkSoft,
                     ),
               )
             else
@@ -793,8 +791,8 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                           }
                         });
                       },
-                      selectedColor: FinditColors.pine.withValues(alpha: 0.16),
-                      checkmarkColor: FinditColors.pineDeep,
+                      selectedColor: palette.pine.withValues(alpha: 0.2),
+                      checkmarkColor: palette.pineDeep,
                     ),
                 ],
               ),

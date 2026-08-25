@@ -20,11 +20,6 @@ Future<void> showBoxQrSheet(BuildContext context, {required StorageBox box}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: FinditColors.cardFace,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      side: BorderSide(color: FinditColors.cardLine),
-    ),
     builder: (_) => _BoxQrSheet(box: box),
   );
 }
@@ -75,6 +70,7 @@ class _BoxQrSheetState extends State<_BoxQrSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     final box = widget.box;
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
@@ -87,7 +83,7 @@ class _BoxQrSheetState extends State<_BoxQrSheet> {
               width: 36,
               height: 4,
               decoration: BoxDecoration(
-                color: FinditColors.cardLine,
+                color: palette.cardLine,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -98,7 +94,7 @@ class _BoxQrSheetState extends State<_BoxQrSheet> {
           Text(
             '打印或分享这张标签，贴上后一扫即可打开「${box.name}」。',
             style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                  color: FinditColors.inkSoft,
+                  color: palette.inkSoft,
                 ),
           ),
           const SizedBox(height: 20),
@@ -127,6 +123,7 @@ class _BoxQrSheetState extends State<_BoxQrSheet> {
 }
 
 /// 可打印的实体标签卡：白底 + 虚线描边 + 二维码 + 箱名 + 短标签码。
+/// 打印介质始终为白纸，故标签内部固定使用亮色调色板。
 class _QrLabel extends StatelessWidget {
   const _QrLabel({required this.box});
 
@@ -134,6 +131,7 @@ class _QrLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const label = FinditPalette.light;
     return Container(
       width: 260,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
@@ -142,7 +140,7 @@ class _QrLabel extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 14),
         decoration: BoxDecoration(
           border: Border.all(
-            color: FinditColors.pine,
+            color: label.pine,
             width: 1.6,
             strokeAlign: BorderSide.strokeAlignInside,
           ),
@@ -162,21 +160,21 @@ class _QrLabel extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: FinditColors.ink,
+                color: label.ink,
                 height: 1.2,
               ),
             ),
             const SizedBox(height: 6),
             Text(
               'FINDIT · 标签码 ${box.slug.substring(0, 8).toUpperCase()}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
                 letterSpacing: 1.6,
                 fontWeight: FontWeight.w600,
-                color: FinditColors.inkSoft,
+                color: label.inkSoft,
               ),
             ),
           ],

@@ -21,6 +21,7 @@ class EmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(28),
@@ -30,11 +31,11 @@ class EmptyState extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
-              color: FinditColors.cardLine,
+              color: palette.cardLine,
               width: 1.5,
               strokeAlign: BorderSide.strokeAlignInside,
             ),
-            color: FinditColors.cardFace.withValues(alpha: 0.6),
+            color: palette.cardFace.withValues(alpha: 0.6),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -47,7 +48,7 @@ class EmptyState extends StatelessWidget {
                 subtitle,
                 textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: FinditColors.inkSoft,
+                      color: palette.inkSoft,
                     ),
               ),
               if (actionLabel != null && onAction != null) ...[
@@ -84,7 +85,7 @@ Future<bool> confirmDelete(
         ),
         FilledButton(
           style: FilledButton.styleFrom(
-            backgroundColor: FinditColors.danger,
+            backgroundColor: context.palette.danger,
           ),
           onPressed: () => Navigator.of(context).pop(true),
           child: const Text('删除'),
@@ -114,11 +115,6 @@ Future<void> showNameSheet({
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: FinditColors.cardFace,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      side: BorderSide(color: FinditColors.cardLine),
-    ),
     builder: (sheetContext) {
       return Padding(
         padding: EdgeInsets.only(
@@ -207,7 +203,7 @@ class _NameSheetBodyState extends State<_NameSheetBody> {
             width: 36,
             height: 4,
             decoration: BoxDecoration(
-              color: FinditColors.cardLine,
+              color: context.palette.cardLine,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -259,16 +255,17 @@ class CountBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: FinditColors.chipFill,
+        color: palette.chipFill,
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         '$count $unit',
         style: Theme.of(context).textTheme.labelSmall!.copyWith(
-              color: FinditColors.pineDeep,
+              color: palette.pineDeep,
               letterSpacing: 0.4,
             ),
       ),
@@ -287,7 +284,7 @@ class SectionHeader extends StatelessWidget {
     return Text(
       text.toUpperCase(),
       style: Theme.of(context).textTheme.labelSmall!.copyWith(
-            color: FinditColors.inkSoft,
+            color: context.palette.inkSoft,
           ),
     );
   }

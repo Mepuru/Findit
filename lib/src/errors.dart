@@ -19,14 +19,13 @@ String friendlyErrorMessage(Object error) {
   return '出错了：$error';
 }
 
-/// 在 Scaffold 上弹出一条错误提示。
+/// 在 Scaffold 上弹出一条错误提示（底色跟随主题反色）。
 void showErrorSnack(BuildContext context, Object error) {
   final messenger = ScaffoldMessenger.maybeOf(context);
   messenger?.showSnackBar(
     SnackBar(
       content: Text(friendlyErrorMessage(error)),
       behavior: SnackBarBehavior.floating,
-      backgroundColor: const Color(0xFF3A2E28),
     ),
   );
 }

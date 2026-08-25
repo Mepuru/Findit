@@ -186,6 +186,7 @@ class _BoxCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -199,7 +200,7 @@ class _BoxCard extends StatelessWidget {
                 height: 42,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: FinditColors.pine.withValues(alpha: 0.12),
+                  color: palette.pine.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Text('📦', style: TextStyle(fontSize: 22)),
@@ -221,7 +222,7 @@ class _BoxCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                            color: FinditColors.inkSoft,
+                            color: palette.inkSoft,
                           ),
                     ),
                   ],
@@ -235,14 +236,14 @@ class _BoxCard extends StatelessWidget {
                   if (value == 'edit') onEdit();
                   if (value == 'delete') onDelete();
                 },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'qr', child: Text('二维码标签')),
-                  PopupMenuItem(value: 'edit', child: Text('编辑')),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'qr', child: Text('二维码标签')),
+                  const PopupMenuItem(value: 'edit', child: Text('编辑')),
                   PopupMenuItem(
                     value: 'delete',
                     child: Text(
                       '删除',
-                      style: TextStyle(color: FinditColors.danger),
+                      style: TextStyle(color: palette.danger),
                     ),
                   ),
                 ],

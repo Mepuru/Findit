@@ -98,15 +98,17 @@ class _SettingsPageState extends State<SettingsPage> {
                           style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: 6),
                       Text(p.label,
-                          style: const TextStyle(
-                              fontSize: 13, color: FinditColors.inkSoft)),
+                          style: TextStyle(
+                              fontSize: 13,
+                              color: context.palette.inkSoft)),
                       const SizedBox(height: 8),
                       LinearProgressIndicator(value: p.value),
                       if (p.text.isNotEmpty) ...[
                         const SizedBox(height: 4),
                         Text(p.text,
-                            style: const TextStyle(
-                                fontSize: 12, color: FinditColors.inkSoft)),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: context.palette.inkSoft)),
                       ],
                     ],
                   ),
@@ -270,7 +272,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           FilledButton(
             style: FilledButton.styleFrom(
-              backgroundColor: FinditColors.danger,
+              backgroundColor: context.palette.danger,
             ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('确认恢复'),
@@ -284,6 +286,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = context.palette;
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
@@ -296,13 +299,13 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     '备份包含数据库与全部照片（zip 格式）。恢复会覆盖当前数据，'
                     '旧数据自动保留副本。',
                     style: TextStyle(
                       fontSize: 13,
                       height: 1.6,
-                      color: FinditColors.inkSoft,
+                      color: palette.inkSoft,
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -333,13 +336,13 @@ class _SettingsPageState extends State<SettingsPage> {
           _sectionTitle('智能助手'),
           Card(
             child: ListTile(
-              leading: const Icon(Icons.auto_awesome_rounded,
-                  color: FinditColors.pine),
+              leading: Icon(Icons.auto_awesome_rounded,
+                  color: palette.pine),
               title: const Text('AI 设置'),
-              subtitle: const Text(
+              subtitle: Text(
                 '服务地址、模型与语义向量',
                 style:
-                    TextStyle(fontSize: 12, color: FinditColors.inkSoft),
+                    TextStyle(fontSize: 12, color: palette.inkSoft),
               ),
               trailing: const Icon(Icons.chevron_right_rounded),
               shape: RoundedRectangleBorder(
@@ -361,7 +364,7 @@ class _SettingsPageState extends State<SettingsPage> {
       child: Text(
         text,
         style: Theme.of(context).textTheme.labelSmall!.copyWith(
-              color: FinditColors.pineDeep,
+              color: context.palette.pineDeep,
               letterSpacing: 1.6,
             ),
       ),
