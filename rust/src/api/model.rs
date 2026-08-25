@@ -52,3 +52,33 @@ pub struct Category {
     pub id: i64,
     pub name: String,
 }
+
+/// 搜索命中方式。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchedBy {
+    /// 语义向量命中，附带相似度百分比。
+    Semantic,
+    /// 关键词命中。
+    Keyword,
+}
+
+/// 一条搜索结果：物品完整信息 + 所在箱/单元名 + 命中方式。
+#[derive(Debug, Clone, PartialEq)]
+pub struct SearchResult {
+    pub id: i64,
+    pub name: String,
+    pub description: String,
+    pub quantity: i64,
+    /// 照片相对路径；未上传照片时为 `None`。
+    pub photo_path: Option<String>,
+    pub box_id: i64,
+    /// 物品所属分类名列表。
+    pub categories: Vec<String>,
+    /// 所在收纳箱名（便于结果定位）。
+    pub box_name: String,
+    /// 所在存储单元名（便于结果定位）。
+    pub unit_name: String,
+    pub matched_by: MatchedBy,
+    /// 语义命中时的相似度百分比（0-100）；关键词命中为 `None`。
+    pub similarity_percent: Option<i32>,
+}

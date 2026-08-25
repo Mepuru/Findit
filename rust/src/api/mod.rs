@@ -10,6 +10,7 @@ pub mod db;
 pub mod items;
 pub mod model;
 pub mod photos;
+pub mod search;
 pub mod settings;
 pub mod simple;
 pub mod units;
