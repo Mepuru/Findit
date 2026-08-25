@@ -7,7 +7,9 @@
 //! 4. 累计解压大小不超过 `max_uncompressed_bytes`（默认 2GB），
 //!    且压缩比不超过 `max_compression_ratio`（默认 100，防 zip-bomb）；
 //! 5. 必须包含 `findit.db`；
-//! 6. 解压后的 `findit.db` 必须能被 SQLite 打开且 `integrity_check` 通过。
+//! 6. `manifest.json` 必须存在且 `format_version` 不高于当前支持版本；
+//! 7. 解压后的 `findit.db` 必须能被 SQLite 打开且 `integrity_check` 通过，
+//!    `user_version` 不高于当前 schema 版本，且 6 张必需表全部存在。
 //!
 //! 原子替换：当前数据目录先改名为 `{db_dir}.backup-{unix秒}` 保留一份副本，
 //! 临时目录改名顶替；任一改名失败立即回滚。
@@ -17,12 +19,23 @@ use std::io::{BufReader, Read, Write};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::Connection;
+use rusqlite::{params, Connection};
 use uuid::Uuid;
 use zip::ZipArchive;
 
-use crate::core::backup::{DB_ENTRY_NAME, STREAM_BUF_SIZE};
+use crate::core::backup::{DB_ENTRY_NAME, FORMAT_VERSION, MANIFEST_ENTRY_NAME, STREAM_BUF_SIZE};
+use crate::core::db::migrations::CURRENT_VERSION;
 use crate::core::error::{FinditError, FinditResult};
+
+/// 恢复前必须存在的表（迁移 v1 建表清单）。
+const REQUIRED_TABLES: [&str; 6] = [
+    "storage_units",
+    "storage_boxes",
+    "items",
+    "categories",
+    "item_categories",
+    "app_settings",
+];
 
 /// 恢复上限（可注入，便于测试用小值）。
 #[derive(Debug, Clone, Copy)]
@@ -157,8 +170,8 @@ pub fn restore_backup(
         }
     };
 
-    // 6. 校验解压出的数据库。
-    if let Err(e) = validate_extracted_db(&temp_dir.join(DB_ENTRY_NAME)) {
+    // 6. 校验解压出的备份内容（manifest + 数据库 schema）。
+    if let Err(e) = validate_extracted_backup(&temp_dir) {
         let _ = std::fs::remove_dir_all(&temp_dir);
         return Err(e);
     }
@@ -268,9 +281,35 @@ fn extract_all<R: Read + std::io::Seek>(
     Ok((files, written as i64))
 }
 
-/// 校验解压出的 `findit.db`：能被 SQLite 打开且 `integrity_check` 通过。
-fn validate_extracted_db(path: &Path) -> FinditResult<()> {
-    let conn = Connection::open(path)
+/// 校验解压出的备份内容：
+/// 1. `manifest.json` 存在、可解析，`format_version` 缺失或过高时拒绝；
+/// 2. `findit.db` 能被 SQLite 打开且 `integrity_check` 通过；
+/// 3. `user_version` 不高于当前 schema 版本（拒绝来自更新版本应用的备份）；
+/// 4. 6 张必需表全部存在。
+fn validate_extracted_backup(temp_dir: &Path) -> FinditResult<()> {
+    // 1. manifest.json。
+    let manifest_raw =
+        std::fs::read_to_string(temp_dir.join(MANIFEST_ENTRY_NAME)).map_err(|_| {
+            FinditError::Validation("备份缺少 manifest.json，不是有效的 Findit 备份".to_string())
+        })?;
+    let manifest: serde_json::Value = serde_json::from_str(&manifest_raw)
+        .map_err(|e| FinditError::Validation(format!("备份 manifest.json 无法解析：{e}")))?;
+    match manifest.get("format_version").and_then(|v| v.as_i64()) {
+        Some(v) if v <= FORMAT_VERSION => {}
+        Some(v) => {
+            return Err(FinditError::Validation(format!(
+                "备份格式版本过新（format_version={v}，当前支持 {FORMAT_VERSION}），请先升级应用"
+            )))
+        }
+        None => {
+            return Err(FinditError::Validation(
+                "备份 manifest.json 缺少 format_version".to_string(),
+            ))
+        }
+    }
+
+    // 2. 数据库可打开且完整性校验通过。
+    let conn = Connection::open(temp_dir.join(DB_ENTRY_NAME))
         .map_err(|_| FinditError::Validation("备份数据库损坏：无法用 SQLite 打开".to_string()))?;
     let ok: String = conn
         .query_row("PRAGMA integrity_check", [], |row| row.get(0))
@@ -279,6 +318,32 @@ fn validate_extracted_db(path: &Path) -> FinditResult<()> {
         return Err(FinditError::Validation(format!(
             "备份数据库损坏：{ok}"
         )));
+    }
+
+    // 3. user_version 不得高于当前支持的 schema 版本。
+    let user_version: i64 = conn
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(|_| {
+            FinditError::Validation("备份数据库损坏：无法读取 user_version".to_string())
+        })?;
+    if user_version > CURRENT_VERSION {
+        return Err(FinditError::Validation(format!(
+            "备份数据库版本过新（user_version={user_version}，当前支持 {CURRENT_VERSION}），请先升级应用"
+        )));
+    }
+
+    // 4. 必需表全部存在。
+    for table in REQUIRED_TABLES {
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            params![table],
+            |row| row.get(0),
+        )?;
+        if n == 0 {
+            return Err(FinditError::Validation(format!(
+                "备份数据库缺少必需表 {table}，不是有效的 Findit 备份"
+            )));
+        }
     }
     Ok(())
 }

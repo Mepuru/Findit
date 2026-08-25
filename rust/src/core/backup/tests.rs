@@ -450,9 +450,15 @@ fn restore_rejects_corrupt_db_and_preserves_live_data() {
     units::create_unit(&conn, "幸存单元", "恢复失败后必须还在").unwrap();
     drop(conn);
 
-    // 备份里的 findit.db 不是 SQLite 内容。
+    // 备份里的 findit.db 不是 SQLite 内容（附合法 manifest，验证到数据库层才拒绝）。
     let zip_path = root.join("bad.zip");
-    write_test_zip(&zip_path, &[("findit.db", b"not a sqlite database at all")]);
+    write_test_zip(
+        &zip_path,
+        &[
+            ("findit.db", b"not a sqlite database at all"),
+            ("manifest.json", VALID_MANIFEST.as_bytes()),
+        ],
+    );
 
     let err = restore_backup(&zip_path, &db_dir, &DEFAULT_RESTORE_LIMITS, None).unwrap_err();
     assert!(err.to_string().contains("损坏"));
@@ -464,6 +470,129 @@ fn restore_rejects_corrupt_db_and_preserves_live_data() {
     assert_eq!(found[0].name, "幸存单元");
     drop(conn);
     assert_no_backup_residue(&db_dir);
+}
+
+#[test]
+fn export_scrubs_api_key_from_snapshot() {
+    let root = temp_root();
+    let db_dir = root.join("data");
+    let zip_path = root.join("backup.zip");
+    {
+        let conn = open_test_db(&db_dir);
+        seed_data(&conn, &db_dir);
+        settings::set_setting(&conn, "ai_api_key", "sk-secret-123").unwrap();
+        export_backup(&conn, &db_dir, &zip_path, None).unwrap();
+    }
+
+    // 从 zip 里取出 findit.db 验证密钥已被剔除。
+    let file = File::open(&zip_path).unwrap();
+    let mut archive = ZipArchive::new(file).unwrap();
+    let mut db_bytes = Vec::new();
+    archive.by_name("findit.db").unwrap().read_to_end(&mut db_bytes).unwrap();
+    let snapshot_path = root.join("snapshot-check.db");
+    fs::write(&snapshot_path, &db_bytes).unwrap();
+    let conn = Connection::open(&snapshot_path).unwrap();
+    let value: String = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'ai_api_key'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(value.is_empty(), "备份快照中的 API Key 必须为空");
+    // 其它设置不受影响。
+    let other: String = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'ollama_url'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(other, "http://192.168.1.10:11434");
+}
+
+// ---------------------------------------------------------------------------
+// 恢复校验链：schema / manifest
+// ---------------------------------------------------------------------------
+
+/// 构造合法备份的 zip 内 db 字节（真实 SQLite 库）。
+fn valid_backup_db_bytes(root: &Path) -> Vec<u8> {
+    let db_dir = root.join("src");
+    let conn = open_test_db(&db_dir);
+    units::create_unit(&conn, "单元", "").unwrap();
+    drop(conn);
+    fs::read(db_dir.join("findit.db")).unwrap()
+}
+
+const VALID_MANIFEST: &str = r#"{"app":"findit","format_version":1}"#;
+
+#[test]
+fn restore_rejects_missing_manifest() {
+    let root = temp_root();
+    let zip_path = root.join("no_manifest.zip");
+    let db = valid_backup_db_bytes(&root);
+    write_test_zip(&zip_path, &[("findit.db", &db)]);
+    let db_dir = root.join("data");
+    fs::create_dir_all(&db_dir).unwrap();
+    let err = restore_backup(&zip_path, &db_dir, &DEFAULT_RESTORE_LIMITS, None).unwrap_err();
+    assert!(err.to_string().contains("manifest.json"));
+    assert_no_backup_residue(&db_dir);
+}
+
+#[test]
+fn restore_rejects_future_format_version() {
+    let root = temp_root();
+    let zip_path = root.join("future.zip");
+    let db = valid_backup_db_bytes(&root);
+    write_test_zip(
+        &zip_path,
+        &[
+            ("findit.db", &db),
+            ("manifest.json", b"{\"app\":\"findit\",\"format_version\":99}"),
+        ],
+    );
+    let db_dir = root.join("data");
+    fs::create_dir_all(&db_dir).unwrap();
+    let err = restore_backup(&zip_path, &db_dir, &DEFAULT_RESTORE_LIMITS, None).unwrap_err();
+    assert!(err.to_string().contains("格式版本过新"));
+}
+
+#[test]
+fn restore_rejects_higher_user_version() {
+    let root = temp_root();
+    let db_dir = root.join("src");
+    let conn = open_test_db(&db_dir);
+    units::create_unit(&conn, "单元", "").unwrap();
+    // 模拟来自更新版本应用的库。
+    conn.pragma_update(None, "user_version", 999).unwrap();
+    drop(conn);
+    let db = fs::read(db_dir.join("findit.db")).unwrap();
+
+    let zip_path = root.join("newer.zip");
+    write_test_zip(&zip_path, &[("findit.db", &db), ("manifest.json", VALID_MANIFEST.as_bytes())]);
+    let target = root.join("data");
+    fs::create_dir_all(&target).unwrap();
+    let err = restore_backup(&zip_path, &target, &DEFAULT_RESTORE_LIMITS, None).unwrap_err();
+    assert!(err.to_string().contains("版本过新"));
+    assert_no_backup_residue(&target);
+}
+
+#[test]
+fn restore_rejects_missing_required_table() {
+    let root = temp_root();
+    let db_dir = root.join("src");
+    let conn = open_test_db(&db_dir);
+    units::create_unit(&conn, "单元", "").unwrap();
+    conn.execute_batch("DROP TABLE app_settings").unwrap();
+    drop(conn);
+    let db = fs::read(db_dir.join("findit.db")).unwrap();
+
+    let zip_path = root.join("no_table.zip");
+    write_test_zip(&zip_path, &[("findit.db", &db), ("manifest.json", VALID_MANIFEST.as_bytes())]);
+    let target = root.join("data");
+    fs::create_dir_all(&target).unwrap();
+    let err = restore_backup(&zip_path, &target, &DEFAULT_RESTORE_LIMITS, None).unwrap_err();
+    assert!(err.to_string().contains("缺少必需表"));
 }
 
 #[test]
