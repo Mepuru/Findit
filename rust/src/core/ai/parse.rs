@@ -79,6 +79,12 @@ impl ParsedIntent {
     }
 }
 
+/// create_item 的 JSON schema 示例（修复重试提示主用，与 [`PARSE_SYSTEM_PROMPT`] 中一致）。
+pub const CREATE_SCHEMA_JSON: &str = r#"{"intent":"create_item","unit_name":"存储单元名","box_name":"收纳箱名","item_name":"物品名","item_description":"备注","quantity":1}"#;
+
+/// modify_item 的 JSON schema 示例（修复重试提示主用，与 [`PARSE_SYSTEM_PROMPT`] 中一致）。
+pub const MODIFY_SCHEMA_JSON: &str = r#"{"intent":"modify_item","target_query":"用于定位目标物品的关键词","new_unit_name":"","new_box_name":"","new_item_name":"","new_description":"","new_quantity":0}"#;
+
 /// 意图解析系统提示词。
 ///
 /// 要点：给出两种意图的 JSON schema 示例、要求只输出纯 JSON、
@@ -107,6 +113,41 @@ pub const PARSE_EXAMPLES: [&str; 4] = [
     "把扳手移到厨房的杂物箱",
     "把羽绒服的数量改成2",
 ];
+
+/// 修复重试提示中各摘要的字符上限（按 `char` 计，UTF-8 安全）。
+const REPAIR_SUMMARY_MAX_CHARS: usize = 200;
+
+/// 构造四层容错第 4 层的「修复重试」提示。
+///
+/// 解析失败后携带原始用户语句、上次模型的错误输出摘要与解析失败原因摘要，
+/// 要求模型只输出合法 JSON。`kind` 标识当前场景：建档以 [`CREATE_SCHEMA_JSON`]
+/// 为主、修订以 [`MODIFY_SCHEMA_JSON`] 为主（另一 schema 作为备选附上，
+/// 意图最终仍由模型按用户原话判断）；过长摘要按字符安全截取（见 [`head`]）。
+pub fn build_repair_retry_prompt(
+    kind: IntentKind,
+    user_text: &str,
+    bad_output: &str,
+    parse_error: &str,
+) -> String {
+    let (primary, alternate) = match kind {
+        IntentKind::CreateItem => (CREATE_SCHEMA_JSON, MODIFY_SCHEMA_JSON),
+        IntentKind::ModifyItem => (MODIFY_SCHEMA_JSON, CREATE_SCHEMA_JSON),
+    };
+    format!(
+        "你上一次的输出未能解析为合法 JSON，请根据下面的错误信息修复并重新输出。\n\
+         【你上一次的输出（摘录）】{}\n\
+         【解析失败原因】{}\n\
+         【用户原话】{}\n\
+         【输出要求】只输出一个纯 JSON 对象：不要解释、不要 markdown 代码块、不要多余文字。\n\
+         当前场景优先使用以下 schema：\n{}\n\
+         若用户意图实际对应另一种操作，则使用：\n{}",
+        head(bad_output.trim(), REPAIR_SUMMARY_MAX_CHARS),
+        head(parse_error.trim(), REPAIR_SUMMARY_MAX_CHARS),
+        head(user_text.trim(), REPAIR_SUMMARY_MAX_CHARS),
+        primary,
+        alternate,
+    )
+}
 
 // ---------------------------------------------------------------------------
 // 入口
@@ -717,5 +758,78 @@ mod tests {
         assert!(create.item_name.is_none());
         let modify = ParsedIntent::new_modify();
         assert_eq!(modify.intent, IntentKind::ModifyItem);
+    }
+
+    /// 守护：系统提示词内嵌的 schema 与修复重试提示使用的常量保持一致。
+    #[test]
+    fn system_prompt_contains_schema_constants() {
+        assert!(PARSE_SYSTEM_PROMPT.contains(CREATE_SCHEMA_JSON));
+        assert!(PARSE_SYSTEM_PROMPT.contains(MODIFY_SCHEMA_JSON));
+    }
+
+    // ---------- 修复重试提示 ----------
+
+    #[test]
+    fn repair_prompt_create_covers_schema_and_context() {
+        let prompt = build_repair_retry_prompt(
+            IntentKind::CreateItem,
+            "把电钻放进车库的蓝色箱子",
+            "抱歉，我无法完成这个请求。",
+            "无法从模型输出中解析出 JSON",
+        );
+        // 中文上下文原样保留
+        assert!(prompt.contains("把电钻放进车库的蓝色箱子"));
+        assert!(prompt.contains("抱歉，我无法完成这个请求。"));
+        assert!(prompt.contains("无法从模型输出中解析出 JSON"));
+        // create 场景以 create schema 在前，且两种 schema 都附上
+        let create_pos = prompt.find(CREATE_SCHEMA_JSON).unwrap();
+        let modify_pos = prompt.find(MODIFY_SCHEMA_JSON).unwrap();
+        assert!(create_pos < modify_pos);
+        // 要求只输出合法 JSON
+        assert!(prompt.contains("只输出一个纯 JSON 对象"));
+    }
+
+    #[test]
+    fn repair_prompt_modify_leads_with_modify_schema() {
+        let prompt = build_repair_retry_prompt(
+            IntentKind::ModifyItem,
+            "把羽绒服的数量改成2",
+            "```json",
+            "顶层不是 JSON 对象",
+        );
+        let create_pos = prompt.find(CREATE_SCHEMA_JSON).unwrap();
+        let modify_pos = prompt.find(MODIFY_SCHEMA_JSON).unwrap();
+        assert!(modify_pos < create_pos);
+        assert!(prompt.contains("把羽绒服的数量改成2"));
+        assert!(prompt.contains("顶层不是 JSON 对象"));
+    }
+
+    #[test]
+    fn repair_prompt_truncates_long_summary_by_chars() {
+        // 超长错误输出被按字符截取：保留前 200 字符，不出现第 201 个
+        let long_output: String = "收".repeat(500);
+        let prompt = build_repair_retry_prompt(
+            IntentKind::CreateItem,
+            "毛衣装箱",
+            &long_output,
+            "原因",
+        );
+        assert!(prompt.contains(&"收".repeat(REPAIR_SUMMARY_MAX_CHARS)));
+        assert!(!prompt.contains(&"收".repeat(REPAIR_SUMMARY_MAX_CHARS + 1)));
+    }
+
+    #[test]
+    fn repair_prompt_truncation_is_utf8_safe() {
+        // 多字节中文混排下按 chars() 截取不切断字符（不会 panic 也不乱码）
+        let mixed: String = "收纳箱柜".repeat(120); // 480 字符
+        let expected_head: String = mixed.chars().take(REPAIR_SUMMARY_MAX_CHARS).collect();
+        assert_eq!(expected_head.chars().count(), REPAIR_SUMMARY_MAX_CHARS);
+        let prompt = build_repair_retry_prompt(
+            IntentKind::ModifyItem,
+            "挪一下",
+            &mixed,
+            "原因",
+        );
+        assert!(prompt.contains(&expected_head));
     }
 }

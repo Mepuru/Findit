@@ -17,7 +17,10 @@ use crate::core::ai::embed::{
     apply_backfill, clear_all_embeddings, count_items, count_pending_embeddings,
     pending_item_texts, DEFAULT_BATCH_SIZE,
 };
-use crate::core::ai::parse::{parse_intent_from_output, ParsedIntent, PARSE_SYSTEM_PROMPT};
+use crate::core::ai::parse::{
+    build_repair_retry_prompt, parse_intent_from_output, IntentKind, ParsedIntent,
+    PARSE_SYSTEM_PROMPT,
+};
 use crate::core::db::with_conn;
 use crate::core::error::FinditError;
 use crate::core::repo::settings::get_setting;
@@ -145,7 +148,7 @@ pub async fn get_ai_status() -> Result<AiStatus, FinditError> {
 // 一句话解析与应用
 // ---------------------------------------------------------------------------
 
-fn parse_via_ai(text: &str) -> Result<ParsedIntent, FinditError> {
+fn parse_via_ai(text: &str, kind: IntentKind) -> Result<ParsedIntent, FinditError> {
     let text = text.trim();
     if text.is_empty() {
         return Err(FinditError::Validation("请输入要解析的内容".to_string()));
@@ -160,17 +163,29 @@ fn parse_via_ai(text: &str) -> Result<ParsedIntent, FinditError> {
     let raw = transport
         .chat(&config, PARSE_SYSTEM_PROMPT, text)
         .map_err(ai_error_to_findit)?;
-    parse_intent_from_output(&raw).map_err(ai_error_to_findit)
+    match parse_intent_from_output(&raw) {
+        Ok(intent) => Ok(intent),
+        // 四层容错第 4 层：模型输出类错误时携带错误信息对同一 transport 重试恰好 1 次。
+        // 网络 / 服务端错误保持既有策略不重试。全程不持全局数据库锁。
+        Err(AiError::ModelOutput(detail)) => {
+            let repair = build_repair_retry_prompt(kind, text, &raw, &detail);
+            let retried = transport
+                .chat(&config, PARSE_SYSTEM_PROMPT, &repair)
+                .map_err(ai_error_to_findit)?;
+            parse_intent_from_output(&retried).map_err(ai_error_to_findit)
+        }
+        Err(other) => Err(ai_error_to_findit(other)),
+    }
 }
 
 /// 一句话 → 结构化意图（建档或修改，由模型判断）。
 pub async fn parse_quick_add(text: String) -> Result<ParsedIntent, FinditError> {
-    parse_via_ai(&text)
+    parse_via_ai(&text, IntentKind::CreateItem)
 }
 
 /// 一句话 → 修改意图（与 `parse_quick_add` 同一解析链路）。
 pub async fn parse_ai_modify(text: String) -> Result<ParsedIntent, FinditError> {
-    parse_via_ai(&text)
+    parse_via_ai(&text, IntentKind::ModifyItem)
 }
 
 /// 确认建档：单元/箱按名称自动创建或复用同名实体（单事务）。
