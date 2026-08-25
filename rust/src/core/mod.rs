@@ -4,4 +4,5 @@ pub mod db;
 pub mod error;
 pub mod photo;
 pub mod repo;
+pub mod search;
 pub mod util;
