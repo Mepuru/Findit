@@ -226,6 +226,20 @@ pub fn update_item(
     get_item(conn, id)
 }
 
+/// 更新物品的照片路径；`None` 表示清空照片。物品不存在时报错。
+pub fn set_item_photo_path(
+    conn: &Connection,
+    id: i64,
+    photo_path: Option<&str>,
+) -> FinditResult<()> {
+    get_item(conn, id)?;
+    conn.execute(
+        "UPDATE items SET photo_path = ?1, updated_at = ?2 WHERE id = ?3",
+        params![photo_path, now_iso8601(), id],
+    )?;
+    Ok(())
+}
+
 /// 删除物品及其分类关联（显式事务）。
 pub fn delete_item(conn: &Connection, id: i64) -> FinditResult<()> {
     let tx = conn.unchecked_transaction()?;

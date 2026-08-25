@@ -2,5 +2,6 @@
 
 pub mod db;
 pub mod error;
+pub mod photo;
 pub mod repo;
 pub mod util;

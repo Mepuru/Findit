@@ -9,6 +9,7 @@ pub mod categories;
 pub mod db;
 pub mod items;
 pub mod model;
+pub mod photos;
 pub mod settings;
 pub mod simple;
 pub mod units;

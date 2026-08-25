@@ -6,7 +6,7 @@
 
 pub mod migrations;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 
 use rusqlite::Connection;
@@ -17,16 +17,27 @@ use crate::core::error::{FinditError, FinditResult};
 /// 用 `Mutex` 包裹后即为 `Sync`，可作为全局静态量。
 static DB: LazyLock<Mutex<Option<Connection>>> = LazyLock::new(|| Mutex::new(None));
 
+/// 照片存放目录（跟随 [`init_db`] 初始化，为 `db_dir/photos`）。
+static PHOTOS_DIR: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(None));
+
 /// 数据库文件名（位于传入的目录下）。
 pub const DB_FILE_NAME: &str = "findit.db";
+
+/// 照片子目录名（位于 `db_dir` 下）。
+pub const PHOTOS_DIR_NAME: &str = "photos";
 
 /// 打开（或创建）数据库并应用迁移。
 ///
 /// `db_dir` 为目录路径；不存在时会被创建。重复调用会替换当前连接。
+/// 同时初始化照片目录 `db_dir/photos`（不存在则创建）。
 pub fn init_db(db_dir: &str) -> FinditResult<()> {
     let dir = Path::new(db_dir);
     std::fs::create_dir_all(dir)?;
     let db_path = dir.join(DB_FILE_NAME);
+
+    let photos_dir = dir.join(PHOTOS_DIR_NAME);
+    std::fs::create_dir_all(&photos_dir)?;
+    *lock_photos_dir() = Some(photos_dir);
 
     let conn = Connection::open(db_path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -45,6 +56,7 @@ pub fn init_db(db_dir: &str) -> FinditResult<()> {
 pub fn close_db() {
     let mut guard = lock_db();
     *guard = None;
+    *lock_photos_dir() = None;
 }
 
 /// 直接放入一个已配置好的连接（仅供测试使用）。
@@ -52,6 +64,24 @@ pub fn close_db() {
 pub fn set_conn_for_test(conn: Connection) {
     let mut guard = lock_db();
     *guard = Some(conn);
+}
+
+/// 设置照片目录（仅供测试使用）。
+#[cfg(test)]
+pub fn set_photos_dir_for_test(dir: PathBuf) {
+    *lock_photos_dir() = Some(dir);
+}
+
+fn lock_photos_dir<'a>() -> MutexGuard<'a, Option<PathBuf>> {
+    PHOTOS_DIR.lock().expect("照片目录互斥锁中毒")
+}
+
+/// 当前照片目录。未通过 [`init_db`] 初始化时返回 [`FinditError::DbNotInitialized`]。
+pub fn photos_dir() -> FinditResult<PathBuf> {
+    let guard = lock_photos_dir();
+    guard
+        .clone()
+        .ok_or(FinditError::DbNotInitialized)
 }
 
 fn lock_db<'a>() -> MutexGuard<'a, Option<Connection>> {
