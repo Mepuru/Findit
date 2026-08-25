@@ -13,6 +13,10 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 /// 导出备份到 `target_path`（zip）。进度阶段：`snapshot` / `photos` /
 /// `finalize`，最后一条 `done` 事件携带 [`BackupSummary`]。
+///
+/// 锁边界：`with_conn` 内只做 `wal_checkpoint` + `VACUUM INTO` 快照 +
+/// 三表计数（+ 快照库内剔除 API Key），随即释放锁；照片打包与
+/// manifest 写入在无锁环境进行（快照文件已是一致性副本）。
 Stream<BackupProgress> exportBackup({required String targetPath}) =>
     RustLib.instance.api.crateApiBackupExportBackup(targetPath: targetPath);
 

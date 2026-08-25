@@ -12,7 +12,7 @@ import 'model.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `ai_error_message`, `cache_test_result`, `fresh_cached_test`, `parse_via_ai`
+// These functions are ignored because they are not marked as `pub`: `ai_error_message`, `backfill_one_round`, `cache_test_result`, `fresh_cached_test`, `parse_via_ai`
 
 /// 读取 AI 配置（缺失项以默认值补齐）。
 Future<AiConfig> getAiConfig() => RustLib.instance.api.crateApiAiGetAiConfig();
@@ -51,12 +51,16 @@ Future<Float32List?> generateQueryEmbedding({required String text}) =>
     RustLib.instance.api.crateApiAiGenerateQueryEmbedding(text: text);
 
 /// 补齐待处理向量：扫描 `embedding IS NULL` 的物品，分批写入。
-/// 返回本次处理条数。网络按批调用，数据库锁仅短持有；
-/// 中断后重跑即可继续（以数据库为待办源）。
+/// 返回本次处理条数。
+///
+/// 每轮三段式：锁内取一批待处理文本 → 释放锁后做网络调用 →
+/// 锁内写回（写回前重查维度一致性）。网络期间全局锁不持有，
+/// 不会冻结其它数据库操作；中断后重跑即可继续（以数据库为待办源）。
 Future<int> backfillPendingEmbeddings() =>
     RustLib.instance.api.crateApiAiBackfillPendingEmbeddings();
 
 /// 重建全部向量：清空后经 [`StreamSink`] 流式推送进度（done/total）。
 /// Dart 端监听流；函数最终返回处理汇总。
+/// 与 [`backfill_pending_embeddings`] 同样按三段式执行，网络调用不持锁。
 Stream<EmbedProgress> rebuildEmbeddings() =>
     RustLib.instance.api.crateApiAiRebuildEmbeddings();
