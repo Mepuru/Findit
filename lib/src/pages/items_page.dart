@@ -1,15 +1,21 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Int64List;
+import 'package:image_picker/image_picker.dart';
 import 'package:findit/src/rust/api/boxes.dart' as boxes_api;
 import 'package:findit/src/rust/api/categories.dart' as categories_api;
 import 'package:findit/src/rust/api/items.dart' as api;
 import 'package:findit/src/rust/api/model.dart';
+import 'package:findit/src/rust/api/photos.dart' as photos_api;
 
 import '../errors.dart';
 import '../theme.dart';
+import '../widgets/box_qr_sheet.dart';
 import '../widgets/common.dart';
+import 'photo_viewer_page.dart';
 
 /// 第三级：某个收纳箱内的物品列表。
 class ItemsPage extends StatefulWidget {
@@ -26,6 +32,9 @@ class _ItemsPageState extends State<ItemsPage> {
   List<Item>? _items;
   Object? _loadError;
 
+  /// item_id → 照片本地路径（列表缩略图 + 大图）。
+  final Map<int, ({String thumb, String full})> _photoPaths = {};
+
   @override
   void initState() {
     super.initState();
@@ -38,10 +47,29 @@ class _ItemsPageState extends State<ItemsPage> {
         boxes_api.getBox(id: widget.boxId),
         api.listItems(boxId: widget.boxId),
       ]);
+      final box = results[0] as StorageBox;
+      final items = results[1] as List<Item>;
+
+      // 解析照片本地路径；文件缺失时仅不展示。
+      final photos = <int, ({String thumb, String full})>{};
+      for (final item in items) {
+        final fileName = item.photoPath;
+        if (fileName == null) continue;
+        try {
+          photos[item.id] = (
+            thumb: await photos_api.getThumbFullPath(fileName: fileName),
+            full: await photos_api.getPhotoFullPath(fileName: fileName),
+          );
+        } catch (_) {}
+      }
+
       if (!mounted) return;
       setState(() {
-        _box = results[0] as StorageBox;
-        _items = results[1] as List<Item>;
+        _box = box;
+        _items = items;
+        _photoPaths
+          ..clear()
+          ..addAll(photos);
         _loadError = null;
       });
     } catch (e) {
@@ -69,6 +97,7 @@ class _ItemsPageState extends State<ItemsPage> {
       ),
       builder: (sheetContext) => _ItemFormSheet(
         item: item,
+        onPhotoChanged: _reload,
         onSubmit: (name, description, quantity, categoryIds) async {
           if (item == null) {
             await api.createItem(
@@ -108,10 +137,39 @@ class _ItemsPageState extends State<ItemsPage> {
     }
   }
 
+  /// 打开物品照片大图预览；返回后若照片已删除则刷新。
+  Future<void> _openPhotoViewer(Item item) async {
+    final paths = _photoPaths[item.id];
+    if (paths == null) return;
+    final deleted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PhotoViewerPage(
+          title: item.name,
+          photoPath: paths.full,
+          onDelete: () async {
+            await photos_api.deleteItemPhoto(itemId: item.id);
+            return true;
+          },
+        ),
+      ),
+    );
+    if (deleted == true) await _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_box?.name ?? '物品')),
+      appBar: AppBar(
+        title: Text(_box?.name ?? '物品'),
+        actions: [
+          if (_box != null)
+            IconButton(
+              tooltip: '箱标签二维码',
+              icon: const Icon(Icons.qr_code_rounded),
+              onPressed: () => showBoxQrSheet(context, box: _box!),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _openCreateSheet,
         icon: const Icon(Icons.add),
@@ -159,6 +217,8 @@ class _ItemsPageState extends State<ItemsPage> {
             separatorBuilder: (context, index) => const SizedBox(height: 10),
             itemBuilder: (context, index) => _ItemCard(
               item: items[index],
+              photoThumb: _photoPaths[items[index].id]?.thumb,
+              onPhotoTap: () => _openPhotoViewer(items[index]),
               onEdit: () => _openEditSheet(items[index]),
               onDelete: () => _delete(items[index]),
             ),
@@ -172,16 +232,34 @@ class _ItemsPageState extends State<ItemsPage> {
 class _ItemCard extends StatelessWidget {
   const _ItemCard({
     required this.item,
+    required this.photoThumb,
+    required this.onPhotoTap,
     required this.onEdit,
     required this.onDelete,
   });
 
   final Item item;
+
+  /// 缩略图本地路径；无照片时为 `null`。
+  final String? photoThumb;
+  final VoidCallback onPhotoTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  Widget get _tagIcon => Container(
+        width: 42,
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: FinditColors.persimmon.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: const Text('🏷️', style: TextStyle(fontSize: 22)),
+      );
+
   @override
   Widget build(BuildContext context) {
+    final thumb = photoThumb;
     return Card(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
@@ -190,16 +268,22 @@ class _ItemCard extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: FinditColors.persimmon.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text('🏷️', style: TextStyle(fontSize: 22)),
-              ),
+              if (thumb != null)
+                GestureDetector(
+                  onTap: onPhotoTap,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.file(
+                      File(thumb),
+                      width: 42,
+                      height: 42,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => _tagIcon,
+                    ),
+                  ),
+                )
+              else
+                _tagIcon,
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -292,9 +376,14 @@ class _ItemCard extends StatelessWidget {
   }
 }
 
-/// 物品表单：名称、备注、数量、分类多选（支持行内新建分类）。
+/// 物品表单：名称、备注、数量、分类多选（支持行内新建分类）；
+/// 编辑态另含照片区（拍照/选图/替换/删除/大图预览）。
 class _ItemFormSheet extends StatefulWidget {
-  const _ItemFormSheet({required this.item, required this.onSubmit});
+  const _ItemFormSheet({
+    required this.item,
+    required this.onSubmit,
+    this.onPhotoChanged,
+  });
 
   final Item? item;
   final Future<void> Function(
@@ -303,6 +392,9 @@ class _ItemFormSheet extends StatefulWidget {
     int quantity,
     Int64List categoryIds,
   ) onSubmit;
+
+  /// 照片变更（新增/替换/删除）后回调，用于刷新外层列表。
+  final VoidCallback? onPhotoChanged;
 
   @override
   State<_ItemFormSheet> createState() => _ItemFormSheetState();
@@ -319,6 +411,13 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
   bool _busy = false;
   Object? _categoriesError;
 
+  /// 当前照片文件名（跟随保存/删除操作更新）。
+  String? _photoPath;
+  bool _photoBusy = false;
+
+  /// 缩略图路径 Future（缓存，避免重复解析）。
+  Future<String>? _thumbFuture;
+
   @override
   void initState() {
     super.initState();
@@ -327,6 +426,10 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     _descController = TextEditingController(text: item?.description ?? '');
     _quantityController =
         TextEditingController(text: (item?.quantity ?? 1).toString());
+    _photoPath = item?.photoPath;
+    if (_photoPath != null) {
+      _thumbFuture = photos_api.getThumbFullPath(fileName: _photoPath!);
+    }
     _loadCategories();
   }
 
@@ -399,6 +502,180 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     );
   }
 
+  // ---------- 照片 ----------
+
+  /// 拍照或从相册选图 → 交给 Rust 压缩落盘。
+  Future<void> _pickAndSavePhoto(ImageSource source) async {
+    final item = widget.item;
+    if (item == null || _photoBusy) return;
+    try {
+      final picked = await ImagePicker().pickImage(source: source);
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      setState(() => _photoBusy = true);
+      await photos_api.saveItemPhoto(itemId: item.id, bytes: bytes);
+      final refreshed = await api.getItem(id: item.id);
+      if (!mounted) return;
+      setState(() {
+        _photoPath = refreshed.photoPath;
+        _thumbFuture = _photoPath == null
+            ? null
+            : photos_api.getThumbFullPath(fileName: _photoPath!);
+      });
+      widget.onPhotoChanged?.call();
+    } catch (e) {
+      if (mounted) showErrorSnack(context, e);
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  Future<void> _deletePhoto() async {
+    final item = widget.item;
+    if (item == null || _photoPath == null || _photoBusy) return;
+    final confirmed = await confirmDelete(
+      context,
+      title: '删除这张照片？',
+      message: '照片文件将被移除，且无法恢复。',
+    );
+    if (!confirmed) return;
+    try {
+      setState(() => _photoBusy = true);
+      await photos_api.deleteItemPhoto(itemId: item.id);
+      if (!mounted) return;
+      setState(() {
+        _photoPath = null;
+        _thumbFuture = null;
+      });
+      widget.onPhotoChanged?.call();
+    } catch (e) {
+      if (mounted) showErrorSnack(context, e);
+    } finally {
+      if (mounted) setState(() => _photoBusy = false);
+    }
+  }
+
+  /// 打开大图预览。
+  Future<void> _viewPhoto() async {
+    final item = widget.item;
+    final fileName = _photoPath;
+    if (item == null || fileName == null) return;
+    try {
+      final full = await photos_api.getPhotoFullPath(fileName: fileName);
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              PhotoViewerPage(title: item.name, photoPath: full),
+        ),
+      );
+    } catch (e) {
+      if (mounted) showErrorSnack(context, e);
+    }
+  }
+
+  /// 照片区：左侧缩略图（可点大图）+ 右侧操作按钮。
+  Widget _buildPhotoArea() {
+    final fileName = _photoPath;
+    final thumbFuture = _thumbFuture;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: fileName != null ? _viewPhoto : null,
+          child: Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: FinditColors.chipFill,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: FinditColors.cardLine),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: fileName != null && thumbFuture != null
+                ? FutureBuilder<String>(
+                    future: thumbFuture,
+                    builder: (context, snap) {
+                      if (!snap.hasData) {
+                        return const Center(
+                          child: SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        );
+                      }
+                      return Image.file(
+                        File(snap.data!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const Icon(
+                          Icons.broken_image_outlined,
+                          color: FinditColors.inkSoft,
+                        ),
+                      );
+                    },
+                  )
+                : const Icon(
+                    Icons.photo_camera_outlined,
+                    color: FinditColors.inkSoft,
+                  ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: _photoBusy
+                        ? null
+                        : () => _pickAndSavePhoto(ImageSource.camera),
+                    icon: const Icon(Icons.photo_camera, size: 16),
+                    label: Text(fileName != null ? '重新拍照' : '拍照'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _photoBusy
+                        ? null
+                        : () => _pickAndSavePhoto(ImageSource.gallery),
+                    icon: const Icon(Icons.photo_library_outlined, size: 16),
+                    label: const Text('相册'),
+                  ),
+                  if (fileName != null)
+                    TextButton.icon(
+                      onPressed: _photoBusy ? null : _deletePhoto,
+                      icon: const Icon(
+                        Icons.delete_outline_rounded,
+                        size: 16,
+                        color: FinditColors.danger,
+                      ),
+                      label: const Text(
+                        '删除',
+                        style: TextStyle(color: FinditColors.danger),
+                      ),
+                    ),
+                ],
+              ),
+              if (_photoBusy) ...[
+                const SizedBox(height: 8),
+                Text(
+                  '正在压缩保存…',
+                  style: Theme.of(context).textTheme.labelSmall!.copyWith(
+                        color: FinditColors.inkSoft,
+                      ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -439,6 +716,20 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
+            if (isEdit) ...[
+              Text('照片留档', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              _buildPhotoArea(),
+              const SizedBox(height: 16),
+            ] else ...[
+              Text(
+                '保存物品后可在编辑页拍照留档。',
+                style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                      color: FinditColors.inkSoft,
+                    ),
+              ),
+              const SizedBox(height: 16),
+            ],
             TextField(
               controller: _nameController,
               autofocus: !isEdit,
