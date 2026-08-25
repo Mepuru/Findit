@@ -11,6 +11,9 @@ use crate::core::error::FinditResult;
 pub const CURRENT_VERSION: i64 = 1;
 
 /// 按 `user_version` 顺序应用所有未执行的迁移。
+///
+/// 版本回写仅发生在升级路径（`version < CURRENT_VERSION`）；
+/// 更高版本的库不会被静默改回低版本号（避免覆盖来自新版应用的备份）。
 pub fn run_migrations(conn: &Connection) -> FinditResult<()> {
     let version: i64 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
@@ -18,7 +21,7 @@ pub fn run_migrations(conn: &Connection) -> FinditResult<()> {
         migrate_v1(conn)?;
     }
 
-    if version != CURRENT_VERSION {
+    if version < CURRENT_VERSION {
         conn.pragma_update(None, "user_version", CURRENT_VERSION)?;
     }
     Ok(())
@@ -114,5 +117,18 @@ mod tests {
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
         assert_eq!(v, CURRENT_VERSION);
+    }
+
+    #[test]
+    fn higher_user_version_is_not_downgraded() {
+        // 来自更新版本应用的库不应被静默改回当前版本号。
+        let conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "user_version", CURRENT_VERSION + 5)
+            .unwrap();
+        run_migrations(&conn).unwrap();
+        let v: i64 = conn
+            .pragma_query_value(None, "user_version", |r| r.get(0))
+            .unwrap();
+        assert_eq!(v, CURRENT_VERSION + 5);
     }
 }
