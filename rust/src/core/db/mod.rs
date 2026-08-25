@@ -20,6 +20,9 @@ static DB: LazyLock<Mutex<Option<Connection>>> = LazyLock::new(|| Mutex::new(Non
 /// 照片存放目录（跟随 [`init_db`] 初始化，为 `db_dir/photos`）。
 static PHOTOS_DIR: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(None));
 
+/// 数据库所在目录（跟随 [`init_db`] 初始化；备份恢复后据此重开连接）。
+static DB_DIR: LazyLock<Mutex<Option<PathBuf>>> = LazyLock::new(|| Mutex::new(None));
+
 /// 数据库文件名（位于传入的目录下）。
 pub const DB_FILE_NAME: &str = "findit.db";
 
@@ -38,6 +41,7 @@ pub fn init_db(db_dir: &str) -> FinditResult<()> {
     let photos_dir = dir.join(PHOTOS_DIR_NAME);
     std::fs::create_dir_all(&photos_dir)?;
     *lock_photos_dir() = Some(photos_dir);
+    *lock_db_dir() = Some(dir.to_path_buf());
 
     let conn = Connection::open(db_path)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -57,6 +61,7 @@ pub fn close_db() {
     let mut guard = lock_db();
     *guard = None;
     *lock_photos_dir() = None;
+    // 注意：DB_DIR 保留，供备份恢复失败后重新打开原库使用。
 }
 
 /// 直接放入一个已配置好的连接（仅供测试使用）。
@@ -74,6 +79,18 @@ pub fn set_photos_dir_for_test(dir: PathBuf) {
 
 fn lock_photos_dir<'a>() -> MutexGuard<'a, Option<PathBuf>> {
     PHOTOS_DIR.lock().expect("照片目录互斥锁中毒")
+}
+
+fn lock_db_dir<'a>() -> MutexGuard<'a, Option<PathBuf>> {
+    DB_DIR.lock().expect("数据库目录互斥锁中毒")
+}
+
+/// 当前数据库目录。未通过 [`init_db`] 初始化时返回 [`FinditError::DbNotInitialized`]。
+pub fn db_dir() -> FinditResult<PathBuf> {
+    let guard = lock_db_dir();
+    guard
+        .clone()
+        .ok_or(FinditError::DbNotInitialized)
 }
 
 /// 当前照片目录。未通过 [`init_db`] 初始化时返回 [`FinditError::DbNotInitialized`]。
