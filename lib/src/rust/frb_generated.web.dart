@@ -7,6 +7,7 @@
 // ignore_for_file: argument_type_not_assignable
 
 import 'api/ai.dart';
+import 'api/backup.dart';
 import 'api/boxes.dart';
 import 'api/categories.dart';
 import 'api/db.dart';
@@ -40,7 +41,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException dco_decode_AnyhowException(dynamic raw);
 
   @protected
+  RustStreamSink<BackupProgress> dco_decode_StreamSink_backup_progress_Sse(
+    dynamic raw,
+  );
+
+  @protected
   RustStreamSink<EmbedProgress> dco_decode_StreamSink_embed_progress_Sse(
+    dynamic raw,
+  );
+
+  @protected
+  RustStreamSink<RestoreProgress> dco_decode_StreamSink_restore_progress_Sse(
     dynamic raw,
   );
 
@@ -60,10 +71,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AiTestResult dco_decode_ai_test_result(dynamic raw);
 
   @protected
+  BackupProgress dco_decode_backup_progress(dynamic raw);
+
+  @protected
+  BackupSummary dco_decode_backup_summary(dynamic raw);
+
+  @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
   AiConfig dco_decode_box_autoadd_ai_config(dynamic raw);
+
+  @protected
+  BackupSummary dco_decode_box_autoadd_backup_summary(dynamic raw);
 
   @protected
   bool dco_decode_box_autoadd_bool(dynamic raw);
@@ -79,6 +99,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ParsedIntent dco_decode_box_autoadd_parsed_intent(dynamic raw);
+
+  @protected
+  RestoreSummary dco_decode_box_autoadd_restore_summary(dynamic raw);
 
   @protected
   Category dco_decode_category(dynamic raw);
@@ -150,6 +173,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  BackupSummary? dco_decode_opt_box_autoadd_backup_summary(dynamic raw);
+
+  @protected
   bool? dco_decode_opt_box_autoadd_bool(dynamic raw);
 
   @protected
@@ -162,6 +188,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw);
 
   @protected
+  RestoreSummary? dco_decode_opt_box_autoadd_restore_summary(dynamic raw);
+
+  @protected
   Float32List? dco_decode_opt_list_prim_f_32_strict(dynamic raw);
 
   @protected
@@ -172,6 +201,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   QuickAddResult dco_decode_quick_add_result(dynamic raw);
+
+  @protected
+  RestoreProgress dco_decode_restore_progress(dynamic raw);
+
+  @protected
+  RestoreSummary dco_decode_restore_summary(dynamic raw);
 
   @protected
   SearchResult dco_decode_search_result(dynamic raw);
@@ -189,7 +224,17 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
 
   @protected
+  RustStreamSink<BackupProgress> sse_decode_StreamSink_backup_progress_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   RustStreamSink<EmbedProgress> sse_decode_StreamSink_embed_progress_Sse(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RustStreamSink<RestoreProgress> sse_decode_StreamSink_restore_progress_Sse(
     SseDeserializer deserializer,
   );
 
@@ -209,10 +254,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   AiTestResult sse_decode_ai_test_result(SseDeserializer deserializer);
 
   @protected
+  BackupProgress sse_decode_backup_progress(SseDeserializer deserializer);
+
+  @protected
+  BackupSummary sse_decode_backup_summary(SseDeserializer deserializer);
+
+  @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
   AiConfig sse_decode_box_autoadd_ai_config(SseDeserializer deserializer);
+
+  @protected
+  BackupSummary sse_decode_box_autoadd_backup_summary(
+    SseDeserializer deserializer,
+  );
 
   @protected
   bool sse_decode_box_autoadd_bool(SseDeserializer deserializer);
@@ -228,6 +284,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ParsedIntent sse_decode_box_autoadd_parsed_intent(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RestoreSummary sse_decode_box_autoadd_restore_summary(
     SseDeserializer deserializer,
   );
 
@@ -305,6 +366,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  BackupSummary? sse_decode_opt_box_autoadd_backup_summary(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer);
 
   @protected
@@ -319,6 +385,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer);
 
   @protected
+  RestoreSummary? sse_decode_opt_box_autoadd_restore_summary(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   Float32List? sse_decode_opt_list_prim_f_32_strict(
     SseDeserializer deserializer,
   );
@@ -331,6 +402,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   QuickAddResult sse_decode_quick_add_result(SseDeserializer deserializer);
+
+  @protected
+  RestoreProgress sse_decode_restore_progress(SseDeserializer deserializer);
+
+  @protected
+  RestoreSummary sse_decode_restore_summary(SseDeserializer deserializer);
 
   @protected
   SearchResult sse_decode_search_result(SseDeserializer deserializer);
@@ -351,8 +428,20 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_StreamSink_backup_progress_Sse(
+    RustStreamSink<BackupProgress> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_StreamSink_embed_progress_Sse(
     RustStreamSink<EmbedProgress> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_restore_progress_Sse(
+    RustStreamSink<RestoreProgress> self,
     SseSerializer serializer,
   );
 
@@ -372,11 +461,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_ai_test_result(AiTestResult self, SseSerializer serializer);
 
   @protected
+  void sse_encode_backup_progress(
+    BackupProgress self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_backup_summary(BackupSummary self, SseSerializer serializer);
+
+  @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
   void sse_encode_box_autoadd_ai_config(
     AiConfig self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_backup_summary(
+    BackupSummary self,
     SseSerializer serializer,
   );
 
@@ -401,6 +505,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_parsed_intent(
     ParsedIntent self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_restore_summary(
+    RestoreSummary self,
     SseSerializer serializer,
   );
 
@@ -492,6 +602,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_backup_summary(
+    BackupSummary? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer);
 
   @protected
@@ -506,6 +622,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_i_64(
     PlatformInt64? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_restore_summary(
+    RestoreSummary? self,
     SseSerializer serializer,
   );
 
@@ -527,6 +649,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_quick_add_result(
     QuickAddResult self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_restore_progress(
+    RestoreProgress self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_restore_summary(
+    RestoreSummary self,
     SseSerializer serializer,
   );
 

@@ -132,3 +132,55 @@ pub struct EmbedProgressSummary {
     pub processed: i32,
     pub total: i32,
 }
+
+/// 备份导出汇总。
+#[derive(Debug, Clone, PartialEq)]
+pub struct BackupSummary {
+    pub items_count: i64,
+    pub boxes_count: i64,
+    pub units_count: i64,
+    /// 打进 zip 的照片文件数（含缩略图）。
+    pub photos_count: i32,
+    /// zip 内未压缩总字节数。
+    pub total_bytes: i64,
+    /// 实际写入的备份文件路径。
+    pub path: String,
+}
+
+/// 备份导出进度（流式推送）。
+///
+/// `stage` ∈ `snapshot` / `photos` / `finalize` / `done`；
+/// 最后一条事件（`stage == "done"`）携带完整 [`BackupSummary`]
+/// （FRB 的流式函数返回值不会到达 Dart，故随流下发）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct BackupProgress {
+    pub stage: String,
+    pub done: i32,
+    pub total: i32,
+    pub summary: Option<BackupSummary>,
+}
+
+/// 备份恢复汇总。
+#[derive(Debug, Clone, PartialEq)]
+pub struct RestoreSummary {
+    /// 恢复成功标记：Dart 侧据此提示并刷新全部页面数据。
+    pub restored: bool,
+    /// 恢复后库中的库存计数。
+    pub items_count: i64,
+    pub boxes_count: i64,
+    pub units_count: i64,
+    /// 恢复的照片文件数（含缩略图）。
+    pub photos_count: i32,
+}
+
+/// 备份恢复进度（流式推送）。
+///
+/// `stage` ∈ `validate` / `extract` / `swap` / `done`；
+/// 最后一条事件（`stage == "done"`）携带完整 [`RestoreSummary`]。
+#[derive(Debug, Clone, PartialEq)]
+pub struct RestoreProgress {
+    pub stage: String,
+    pub done: i32,
+    pub total: i32,
+    pub summary: Option<RestoreSummary>,
+}

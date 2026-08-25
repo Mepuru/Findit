@@ -37,7 +37,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.11.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1913233722;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1469091208;
 
 // Section: executor
 
@@ -489,6 +489,43 @@ fn wire__crate__api__units__delete_unit_impl(
                     })()
                     .await,
                 )
+            }
+        },
+    )
+}
+fn wire__crate__api__backup__export_backup_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "export_backup",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_target_path = <String>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::api::model::BackupProgress,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::core::error::FinditError>((move || {
+                    let output_ok = crate::api::backup::export_backup(api_target_path, api_sink)?;
+                    Ok(output_ok)
+                })())
             }
         },
     )
@@ -1209,6 +1246,43 @@ fn wire__crate__api__categories__rename_category_impl(
         },
     )
 }
+fn wire__crate__api__backup__restore_backup_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "restore_backup",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_zip_path = <String>::sse_decode(&mut deserializer);
+            let api_sink = <StreamSink<
+                crate::api::model::RestoreProgress,
+                flutter_rust_bridge::for_generated::SseCodec,
+            >>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::core::error::FinditError>((move || {
+                    let output_ok = crate::api::backup::restore_backup(api_zip_path, api_sink)?;
+                    Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__ai__save_ai_config_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1540,7 +1614,27 @@ impl SseDecode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseDecode
+    for StreamSink<crate::api::model::BackupProgress, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
     for StreamSink<crate::api::model::EmbedProgress, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <String>::sse_decode(deserializer);
+        return StreamSink::deserialize(inner);
+    }
+}
+
+impl SseDecode
+    for StreamSink<crate::api::model::RestoreProgress, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1629,6 +1723,42 @@ impl SseDecode for crate::api::model::AiTestResult {
             chat_message: var_chatMessage,
             embed_ok: var_embedOk,
             embed_message: var_embedMessage,
+        };
+    }
+}
+
+impl SseDecode for crate::api::model::BackupProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_stage = <String>::sse_decode(deserializer);
+        let mut var_done = <i32>::sse_decode(deserializer);
+        let mut var_total = <i32>::sse_decode(deserializer);
+        let mut var_summary = <Option<crate::api::model::BackupSummary>>::sse_decode(deserializer);
+        return crate::api::model::BackupProgress {
+            stage: var_stage,
+            done: var_done,
+            total: var_total,
+            summary: var_summary,
+        };
+    }
+}
+
+impl SseDecode for crate::api::model::BackupSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_itemsCount = <i64>::sse_decode(deserializer);
+        let mut var_boxesCount = <i64>::sse_decode(deserializer);
+        let mut var_unitsCount = <i64>::sse_decode(deserializer);
+        let mut var_photosCount = <i32>::sse_decode(deserializer);
+        let mut var_totalBytes = <i64>::sse_decode(deserializer);
+        let mut var_path = <String>::sse_decode(deserializer);
+        return crate::api::model::BackupSummary {
+            items_count: var_itemsCount,
+            boxes_count: var_boxesCount,
+            units_count: var_unitsCount,
+            photos_count: var_photosCount,
+            total_bytes: var_totalBytes,
+            path: var_path,
         };
     }
 }
@@ -1950,6 +2080,17 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for Option<crate::api::model::BackupSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::model::BackupSummary>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<bool> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1990,6 +2131,19 @@ impl SseDecode for Option<i64> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<i64>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::model::RestoreSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::model::RestoreSummary>::sse_decode(
+                deserializer,
+            ));
         } else {
             return None;
         }
@@ -2060,6 +2214,40 @@ impl SseDecode for crate::core::ai::apply::QuickAddResult {
             unit: var_unit,
             storage_box: var_storageBox,
             item: var_item,
+        };
+    }
+}
+
+impl SseDecode for crate::api::model::RestoreProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_stage = <String>::sse_decode(deserializer);
+        let mut var_done = <i32>::sse_decode(deserializer);
+        let mut var_total = <i32>::sse_decode(deserializer);
+        let mut var_summary = <Option<crate::api::model::RestoreSummary>>::sse_decode(deserializer);
+        return crate::api::model::RestoreProgress {
+            stage: var_stage,
+            done: var_done,
+            total: var_total,
+            summary: var_summary,
+        };
+    }
+}
+
+impl SseDecode for crate::api::model::RestoreSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_restored = <bool>::sse_decode(deserializer);
+        let mut var_itemsCount = <i64>::sse_decode(deserializer);
+        let mut var_boxesCount = <i64>::sse_decode(deserializer);
+        let mut var_unitsCount = <i64>::sse_decode(deserializer);
+        let mut var_photosCount = <i32>::sse_decode(deserializer);
+        return crate::api::model::RestoreSummary {
+            restored: var_restored,
+            items_count: var_itemsCount,
+            boxes_count: var_boxesCount,
+            units_count: var_unitsCount,
+            photos_count: var_photosCount,
         };
     }
 }
@@ -2167,36 +2355,38 @@ fn pde_ffi_dispatcher_primary_impl(
         10 => wire__crate__api__items__delete_item_impl(port, ptr, rust_vec_len, data_len),
         11 => wire__crate__api__photos__delete_item_photo_impl(port, ptr, rust_vec_len, data_len),
         12 => wire__crate__api__units__delete_unit_impl(port, ptr, rust_vec_len, data_len),
-        13 => {
+        13 => wire__crate__api__backup__export_backup_impl(port, ptr, rust_vec_len, data_len),
+        14 => {
             wire__crate__api__ai__generate_query_embedding_impl(port, ptr, rust_vec_len, data_len)
         }
-        14 => wire__crate__api__ai__get_ai_config_impl(port, ptr, rust_vec_len, data_len),
-        15 => wire__crate__api__ai__get_ai_status_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__boxes__get_box_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__boxes__get_box_by_slug_impl(port, ptr, rust_vec_len, data_len),
-        18 => wire__crate__api__items__get_item_impl(port, ptr, rust_vec_len, data_len),
-        19 => wire__crate__api__photos__get_photo_full_path_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
-        21 => wire__crate__api__photos__get_thumb_full_path_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__units__get_unit_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__db__init_db_impl(port, ptr, rust_vec_len, data_len),
-        25 => wire__crate__api__boxes__list_boxes_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__categories__list_categories_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__items__list_items_impl(port, ptr, rust_vec_len, data_len),
-        28 => wire__crate__api__units__list_units_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__ai__parse_ai_modify_impl(port, ptr, rust_vec_len, data_len),
-        30 => wire__crate__api__ai__parse_quick_add_impl(port, ptr, rust_vec_len, data_len),
-        31 => wire__crate__api__ai__rebuild_embeddings_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__categories__rename_category_impl(port, ptr, rust_vec_len, data_len),
-        33 => wire__crate__api__ai__save_ai_config_impl(port, ptr, rust_vec_len, data_len),
-        34 => wire__crate__api__photos__save_item_photo_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__search__search_items_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
-        37 => wire__crate__api__ai__test_ai_connection_impl(port, ptr, rust_vec_len, data_len),
-        38 => wire__crate__api__boxes__update_box_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__items__update_item_impl(port, ptr, rust_vec_len, data_len),
-        40 => wire__crate__api__units__update_unit_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__ai__get_ai_config_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__ai__get_ai_status_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__boxes__get_box_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__boxes__get_box_by_slug_impl(port, ptr, rust_vec_len, data_len),
+        19 => wire__crate__api__items__get_item_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__photos__get_photo_full_path_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__settings__get_setting_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__photos__get_thumb_full_path_impl(port, ptr, rust_vec_len, data_len),
+        23 => wire__crate__api__units__get_unit_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__simple__init_app_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__db__init_db_impl(port, ptr, rust_vec_len, data_len),
+        26 => wire__crate__api__boxes__list_boxes_impl(port, ptr, rust_vec_len, data_len),
+        27 => wire__crate__api__categories__list_categories_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__items__list_items_impl(port, ptr, rust_vec_len, data_len),
+        29 => wire__crate__api__units__list_units_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__ai__parse_ai_modify_impl(port, ptr, rust_vec_len, data_len),
+        31 => wire__crate__api__ai__parse_quick_add_impl(port, ptr, rust_vec_len, data_len),
+        32 => wire__crate__api__ai__rebuild_embeddings_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__categories__rename_category_impl(port, ptr, rust_vec_len, data_len),
+        34 => wire__crate__api__backup__restore_backup_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__ai__save_ai_config_impl(port, ptr, rust_vec_len, data_len),
+        36 => wire__crate__api__photos__save_item_photo_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__search__search_items_impl(port, ptr, rust_vec_len, data_len),
+        38 => wire__crate__api__settings__set_setting_impl(port, ptr, rust_vec_len, data_len),
+        39 => wire__crate__api__ai__test_ai_connection_impl(port, ptr, rust_vec_len, data_len),
+        40 => wire__crate__api__boxes__update_box_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__items__update_item_impl(port, ptr, rust_vec_len, data_len),
+        42 => wire__crate__api__units__update_unit_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -2307,6 +2497,54 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::model::AiTestResult>
     for crate::api::model::AiTestResult
 {
     fn into_into_dart(self) -> crate::api::model::AiTestResult {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::model::BackupProgress {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.stage.into_into_dart().into_dart(),
+            self.done.into_into_dart().into_dart(),
+            self.total.into_into_dart().into_dart(),
+            self.summary.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::model::BackupProgress
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::model::BackupProgress>
+    for crate::api::model::BackupProgress
+{
+    fn into_into_dart(self) -> crate::api::model::BackupProgress {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::model::BackupSummary {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.items_count.into_into_dart().into_dart(),
+            self.boxes_count.into_into_dart().into_dart(),
+            self.units_count.into_into_dart().into_dart(),
+            self.photos_count.into_into_dart().into_dart(),
+            self.total_bytes.into_into_dart().into_dart(),
+            self.path.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::model::BackupSummary
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::model::BackupSummary>
+    for crate::api::model::BackupSummary
+{
+    fn into_into_dart(self) -> crate::api::model::BackupSummary {
         self
     }
 }
@@ -2582,6 +2820,53 @@ impl flutter_rust_bridge::IntoIntoDart<crate::core::ai::apply::QuickAddResult>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::model::RestoreProgress {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.stage.into_into_dart().into_dart(),
+            self.done.into_into_dart().into_dart(),
+            self.total.into_into_dart().into_dart(),
+            self.summary.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::model::RestoreProgress
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::model::RestoreProgress>
+    for crate::api::model::RestoreProgress
+{
+    fn into_into_dart(self) -> crate::api::model::RestoreProgress {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::model::RestoreSummary {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.restored.into_into_dart().into_dart(),
+            self.items_count.into_into_dart().into_dart(),
+            self.boxes_count.into_into_dart().into_dart(),
+            self.units_count.into_into_dart().into_dart(),
+            self.photos_count.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::model::RestoreSummary
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::model::RestoreSummary>
+    for crate::api::model::RestoreSummary
+{
+    fn into_into_dart(self) -> crate::api::model::RestoreSummary {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::model::SearchResult {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -2662,7 +2947,25 @@ impl SseEncode for flutter_rust_bridge::for_generated::anyhow::Error {
 }
 
 impl SseEncode
+    for StreamSink<crate::api::model::BackupProgress, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
     for StreamSink<crate::api::model::EmbedProgress, flutter_rust_bridge::for_generated::SseCodec>
+{
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        unimplemented!("")
+    }
+}
+
+impl SseEncode
+    for StreamSink<crate::api::model::RestoreProgress, flutter_rust_bridge::for_generated::SseCodec>
 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2728,6 +3031,28 @@ impl SseEncode for crate::api::model::AiTestResult {
         <String>::sse_encode(self.chat_message, serializer);
         <bool>::sse_encode(self.embed_ok, serializer);
         <String>::sse_encode(self.embed_message, serializer);
+    }
+}
+
+impl SseEncode for crate::api::model::BackupProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.stage, serializer);
+        <i32>::sse_encode(self.done, serializer);
+        <i32>::sse_encode(self.total, serializer);
+        <Option<crate::api::model::BackupSummary>>::sse_encode(self.summary, serializer);
+    }
+}
+
+impl SseEncode for crate::api::model::BackupSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i64>::sse_encode(self.items_count, serializer);
+        <i64>::sse_encode(self.boxes_count, serializer);
+        <i64>::sse_encode(self.units_count, serializer);
+        <i32>::sse_encode(self.photos_count, serializer);
+        <i64>::sse_encode(self.total_bytes, serializer);
+        <String>::sse_encode(self.path, serializer);
     }
 }
 
@@ -2996,6 +3321,16 @@ impl SseEncode for Option<String> {
     }
 }
 
+impl SseEncode for Option<crate::api::model::BackupSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::model::BackupSummary>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<bool> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -3032,6 +3367,16 @@ impl SseEncode for Option<i64> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <i64>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::model::RestoreSummary> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::model::RestoreSummary>::sse_encode(value, serializer);
         }
     }
 }
@@ -3080,6 +3425,27 @@ impl SseEncode for crate::core::ai::apply::QuickAddResult {
         <crate::core::ai::apply::EntityRef>::sse_encode(self.unit, serializer);
         <crate::core::ai::apply::EntityRef>::sse_encode(self.storage_box, serializer);
         <crate::api::model::Item>::sse_encode(self.item, serializer);
+    }
+}
+
+impl SseEncode for crate::api::model::RestoreProgress {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.stage, serializer);
+        <i32>::sse_encode(self.done, serializer);
+        <i32>::sse_encode(self.total, serializer);
+        <Option<crate::api::model::RestoreSummary>>::sse_encode(self.summary, serializer);
+    }
+}
+
+impl SseEncode for crate::api::model::RestoreSummary {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.restored, serializer);
+        <i64>::sse_encode(self.items_count, serializer);
+        <i64>::sse_encode(self.boxes_count, serializer);
+        <i64>::sse_encode(self.units_count, serializer);
+        <i32>::sse_encode(self.photos_count, serializer);
     }
 }
 

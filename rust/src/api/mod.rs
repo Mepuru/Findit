@@ -5,6 +5,7 @@
 //! FRB 将其映射为 Dart 端可区分的异常。
 
 pub mod ai;
+pub mod backup;
 pub mod boxes;
 pub mod categories;
 pub mod db;

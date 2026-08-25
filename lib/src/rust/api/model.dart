@@ -8,7 +8,7 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// AI 总体状态：配置概要 + 短缓存的探活结果。
 class AiStatus {
@@ -113,6 +113,85 @@ class AiTestResult {
           chatMessage == other.chatMessage &&
           embedOk == other.embedOk &&
           embedMessage == other.embedMessage;
+}
+
+/// 备份导出进度（流式推送）。
+///
+/// `stage` ∈ `snapshot` / `photos` / `finalize` / `done`；
+/// 最后一条事件（`stage == "done"`）携带完整 [`BackupSummary`]
+/// （FRB 的流式函数返回值不会到达 Dart，故随流下发）。
+class BackupProgress {
+  final String stage;
+  final int done;
+  final int total;
+  final BackupSummary? summary;
+
+  const BackupProgress({
+    required this.stage,
+    required this.done,
+    required this.total,
+    this.summary,
+  });
+
+  @override
+  int get hashCode =>
+      stage.hashCode ^ done.hashCode ^ total.hashCode ^ summary.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BackupProgress &&
+          runtimeType == other.runtimeType &&
+          stage == other.stage &&
+          done == other.done &&
+          total == other.total &&
+          summary == other.summary;
+}
+
+/// 备份导出汇总。
+class BackupSummary {
+  final PlatformInt64 itemsCount;
+  final PlatformInt64 boxesCount;
+  final PlatformInt64 unitsCount;
+
+  /// 打进 zip 的照片文件数（含缩略图）。
+  final int photosCount;
+
+  /// zip 内未压缩总字节数。
+  final PlatformInt64 totalBytes;
+
+  /// 实际写入的备份文件路径。
+  final String path;
+
+  const BackupSummary({
+    required this.itemsCount,
+    required this.boxesCount,
+    required this.unitsCount,
+    required this.photosCount,
+    required this.totalBytes,
+    required this.path,
+  });
+
+  @override
+  int get hashCode =>
+      itemsCount.hashCode ^
+      boxesCount.hashCode ^
+      unitsCount.hashCode ^
+      photosCount.hashCode ^
+      totalBytes.hashCode ^
+      path.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is BackupSummary &&
+          runtimeType == other.runtimeType &&
+          itemsCount == other.itemsCount &&
+          boxesCount == other.boxesCount &&
+          unitsCount == other.unitsCount &&
+          photosCount == other.photosCount &&
+          totalBytes == other.totalBytes &&
+          path == other.path;
 }
 
 /// 分类。
@@ -239,6 +318,79 @@ enum MatchedBy {
 
   /// 关键词命中。
   keyword,
+}
+
+/// 备份恢复进度（流式推送）。
+///
+/// `stage` ∈ `validate` / `extract` / `swap` / `done`；
+/// 最后一条事件（`stage == "done"`）携带完整 [`RestoreSummary`]。
+class RestoreProgress {
+  final String stage;
+  final int done;
+  final int total;
+  final RestoreSummary? summary;
+
+  const RestoreProgress({
+    required this.stage,
+    required this.done,
+    required this.total,
+    this.summary,
+  });
+
+  @override
+  int get hashCode =>
+      stage.hashCode ^ done.hashCode ^ total.hashCode ^ summary.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RestoreProgress &&
+          runtimeType == other.runtimeType &&
+          stage == other.stage &&
+          done == other.done &&
+          total == other.total &&
+          summary == other.summary;
+}
+
+/// 备份恢复汇总。
+class RestoreSummary {
+  /// 恢复成功标记：Dart 侧据此提示并刷新全部页面数据。
+  final bool restored;
+
+  /// 恢复后库中的库存计数。
+  final PlatformInt64 itemsCount;
+  final PlatformInt64 boxesCount;
+  final PlatformInt64 unitsCount;
+
+  /// 恢复的照片文件数（含缩略图）。
+  final int photosCount;
+
+  const RestoreSummary({
+    required this.restored,
+    required this.itemsCount,
+    required this.boxesCount,
+    required this.unitsCount,
+    required this.photosCount,
+  });
+
+  @override
+  int get hashCode =>
+      restored.hashCode ^
+      itemsCount.hashCode ^
+      boxesCount.hashCode ^
+      unitsCount.hashCode ^
+      photosCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RestoreSummary &&
+          runtimeType == other.runtimeType &&
+          restored == other.restored &&
+          itemsCount == other.itemsCount &&
+          boxesCount == other.boxesCount &&
+          unitsCount == other.unitsCount &&
+          photosCount == other.photosCount;
 }
 
 /// 一条搜索结果：物品完整信息 + 所在箱/单元名 + 命中方式。
