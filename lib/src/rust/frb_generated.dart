@@ -3,7 +3,14 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
-import 'api/simple.dart';
+import 'api/boxes.dart';
+import 'api/categories.dart';
+import 'api/db.dart';
+import 'api/items.dart';
+import 'api/model.dart';
+import 'api/settings.dart';
+import 'api/units.dart';
+import 'core/error.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -69,7 +76,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.11.0';
 
   @override
-  int get rustContentHash => -1918914929;
+  int get rustContentHash => 724510848;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -80,9 +87,90 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
-  String crateApiSimpleGreet({required String name});
+  Future<StorageBox> crateApiBoxesCreateBox({
+    required PlatformInt64 unitId,
+    required String name,
+    required String description,
+  });
 
-  Future<void> crateApiSimpleInitApp();
+  Future<Category> crateApiCategoriesCreateCategory({required String name});
+
+  Future<Item> crateApiItemsCreateItem({
+    required PlatformInt64 boxId,
+    required String name,
+    required String description,
+    required PlatformInt64 quantity,
+    required Int64List categoryIds,
+  });
+
+  Future<Unit> crateApiUnitsCreateUnit({
+    required String name,
+    required String description,
+  });
+
+  Future<bool> crateApiBoxesDeleteBox({required PlatformInt64 id});
+
+  Future<bool> crateApiCategoriesDeleteCategory({required PlatformInt64 id});
+
+  Future<bool> crateApiItemsDeleteItem({required PlatformInt64 id});
+
+  Future<bool> crateApiUnitsDeleteUnit({required PlatformInt64 id});
+
+  Future<StorageBox> crateApiBoxesGetBox({required PlatformInt64 id});
+
+  Future<StorageBox> crateApiBoxesGetBoxBySlug({required String slug});
+
+  Future<Item> crateApiItemsGetItem({required PlatformInt64 id});
+
+  Future<String?> crateApiSettingsGetSetting({required String key});
+
+  Future<Unit> crateApiUnitsGetUnit({required PlatformInt64 id});
+
+  Future<bool> crateApiSimpleInitApp();
+
+  Future<bool> crateApiDbInitDb({required String dbDir});
+
+  Future<List<StorageBox>> crateApiBoxesListBoxes({
+    required PlatformInt64 unitId,
+  });
+
+  Future<List<Category>> crateApiCategoriesListCategories();
+
+  Future<List<Item>> crateApiItemsListItems({required PlatformInt64 boxId});
+
+  Future<List<Unit>> crateApiUnitsListUnits();
+
+  Future<Category> crateApiCategoriesRenameCategory({
+    required PlatformInt64 id,
+    required String newName,
+  });
+
+  Future<bool> crateApiSettingsSetSetting({
+    required String key,
+    required String value,
+  });
+
+  Future<StorageBox> crateApiBoxesUpdateBox({
+    required PlatformInt64 id,
+    String? name,
+    String? description,
+    PlatformInt64? unitId,
+  });
+
+  Future<Item> crateApiItemsUpdateItem({
+    required PlatformInt64 id,
+    String? name,
+    String? description,
+    PlatformInt64? quantity,
+    PlatformInt64? boxId,
+    Int64List? categoryIds,
+  });
+
+  Future<Unit> crateApiUnitsUpdateUnit({
+    required PlatformInt64 id,
+    String? name,
+    String? description,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -94,34 +182,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
-  String crateApiSimpleGreet({required String name}) {
-    return handler.executeSync(
-      SyncTask(
-        callFfi: () {
+  Future<StorageBox> crateApiBoxesCreateBox({
+    required PlatformInt64 unitId,
+    required String name,
+    required String description,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(unitId, serializer);
           sse_encode_String(name, serializer);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          sse_encode_String(description, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_String,
-          decodeErrorData: null,
+          decodeSuccessData: sse_decode_storage_box,
+          decodeErrorData: sse_decode_findit_error,
         ),
-        constMeta: kCrateApiSimpleGreetConstMeta,
-        argValues: [name],
+        constMeta: kCrateApiBoxesCreateBoxConstMeta,
+        argValues: [unitId, name, description],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiSimpleGreetConstMeta =>
-      const TaskConstMeta(debugName: "greet", argNames: ["name"]);
+  TaskConstMeta get kCrateApiBoxesCreateBoxConstMeta => const TaskConstMeta(
+    debugName: "create_box",
+    argNames: ["unitId", "name", "description"],
+  );
 
   @override
-  Future<void> crateApiSimpleInitApp() {
+  Future<Category> crateApiCategoriesCreateCategory({required String name}) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
@@ -130,8 +232,361 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           );
         },
         codec: SseCodec(
+          decodeSuccessData: sse_decode_category,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiCategoriesCreateCategoryConstMeta,
+        argValues: [name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCategoriesCreateCategoryConstMeta =>
+      const TaskConstMeta(debugName: "create_category", argNames: ["name"]);
+
+  @override
+  Future<Item> crateApiItemsCreateItem({
+    required PlatformInt64 boxId,
+    required String name,
+    required String description,
+    required PlatformInt64 quantity,
+    required Int64List categoryIds,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(boxId, serializer);
+          sse_encode_String(name, serializer);
+          sse_encode_String(description, serializer);
+          sse_encode_i_64(quantity, serializer);
+          sse_encode_list_prim_i_64_strict(categoryIds, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_item,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiItemsCreateItemConstMeta,
+        argValues: [boxId, name, description, quantity, categoryIds],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiItemsCreateItemConstMeta => const TaskConstMeta(
+    debugName: "create_item",
+    argNames: ["boxId", "name", "description", "quantity", "categoryIds"],
+  );
+
+  @override
+  Future<Unit> crateApiUnitsCreateUnit({
+    required String name,
+    required String description,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(name, serializer);
+          sse_encode_String(description, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
           decodeSuccessData: sse_decode_unit,
-          decodeErrorData: null,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiUnitsCreateUnitConstMeta,
+        argValues: [name, description],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiUnitsCreateUnitConstMeta => const TaskConstMeta(
+    debugName: "create_unit",
+    argNames: ["name", "description"],
+  );
+
+  @override
+  Future<bool> crateApiBoxesDeleteBox({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 5,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiBoxesDeleteBoxConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBoxesDeleteBoxConstMeta =>
+      const TaskConstMeta(debugName: "delete_box", argNames: ["id"]);
+
+  @override
+  Future<bool> crateApiCategoriesDeleteCategory({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiCategoriesDeleteCategoryConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCategoriesDeleteCategoryConstMeta =>
+      const TaskConstMeta(debugName: "delete_category", argNames: ["id"]);
+
+  @override
+  Future<bool> crateApiItemsDeleteItem({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiItemsDeleteItemConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiItemsDeleteItemConstMeta =>
+      const TaskConstMeta(debugName: "delete_item", argNames: ["id"]);
+
+  @override
+  Future<bool> crateApiUnitsDeleteUnit({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiUnitsDeleteUnitConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiUnitsDeleteUnitConstMeta =>
+      const TaskConstMeta(debugName: "delete_unit", argNames: ["id"]);
+
+  @override
+  Future<StorageBox> crateApiBoxesGetBox({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_storage_box,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiBoxesGetBoxConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBoxesGetBoxConstMeta =>
+      const TaskConstMeta(debugName: "get_box", argNames: ["id"]);
+
+  @override
+  Future<StorageBox> crateApiBoxesGetBoxBySlug({required String slug}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(slug, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_storage_box,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiBoxesGetBoxBySlugConstMeta,
+        argValues: [slug],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBoxesGetBoxBySlugConstMeta =>
+      const TaskConstMeta(debugName: "get_box_by_slug", argNames: ["slug"]);
+
+  @override
+  Future<Item> crateApiItemsGetItem({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_item,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiItemsGetItemConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiItemsGetItemConstMeta =>
+      const TaskConstMeta(debugName: "get_item", argNames: ["id"]);
+
+  @override
+  Future<String?> crateApiSettingsGetSetting({required String key}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(key, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_String,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiSettingsGetSettingConstMeta,
+        argValues: [key],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSettingsGetSettingConstMeta =>
+      const TaskConstMeta(debugName: "get_setting", argNames: ["key"]);
+
+  @override
+  Future<Unit> crateApiUnitsGetUnit({required PlatformInt64 id}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiUnitsGetUnitConstMeta,
+        argValues: [id],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiUnitsGetUnitConstMeta =>
+      const TaskConstMeta(debugName: "get_unit", argNames: ["id"]);
+
+  @override
+  Future<bool> crateApiSimpleInitApp() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
         ),
         constMeta: kCrateApiSimpleInitAppConstMeta,
         argValues: [],
@@ -143,10 +598,433 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiSimpleInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
+  @override
+  Future<bool> crateApiDbInitDb({required String dbDir}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbDir, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiDbInitDbConstMeta,
+        argValues: [dbDir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDbInitDbConstMeta =>
+      const TaskConstMeta(debugName: "init_db", argNames: ["dbDir"]);
+
+  @override
+  Future<List<StorageBox>> crateApiBoxesListBoxes({
+    required PlatformInt64 unitId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(unitId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_storage_box,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiBoxesListBoxesConstMeta,
+        argValues: [unitId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBoxesListBoxesConstMeta =>
+      const TaskConstMeta(debugName: "list_boxes", argNames: ["unitId"]);
+
+  @override
+  Future<List<Category>> crateApiCategoriesListCategories() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_category,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiCategoriesListCategoriesConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCategoriesListCategoriesConstMeta =>
+      const TaskConstMeta(debugName: "list_categories", argNames: []);
+
+  @override
+  Future<List<Item>> crateApiItemsListItems({required PlatformInt64 boxId}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(boxId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_item,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiItemsListItemsConstMeta,
+        argValues: [boxId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiItemsListItemsConstMeta =>
+      const TaskConstMeta(debugName: "list_items", argNames: ["boxId"]);
+
+  @override
+  Future<List<Unit>> crateApiUnitsListUnits() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_unit,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiUnitsListUnitsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiUnitsListUnitsConstMeta =>
+      const TaskConstMeta(debugName: "list_units", argNames: []);
+
+  @override
+  Future<Category> crateApiCategoriesRenameCategory({
+    required PlatformInt64 id,
+    required String newName,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          sse_encode_String(newName, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 20,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_category,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiCategoriesRenameCategoryConstMeta,
+        argValues: [id, newName],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiCategoriesRenameCategoryConstMeta =>
+      const TaskConstMeta(
+        debugName: "rename_category",
+        argNames: ["id", "newName"],
+      );
+
+  @override
+  Future<bool> crateApiSettingsSetSetting({
+    required String key,
+    required String value,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(key, serializer);
+          sse_encode_String(value, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 21,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiSettingsSetSettingConstMeta,
+        argValues: [key, value],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiSettingsSetSettingConstMeta =>
+      const TaskConstMeta(debugName: "set_setting", argNames: ["key", "value"]);
+
+  @override
+  Future<StorageBox> crateApiBoxesUpdateBox({
+    required PlatformInt64 id,
+    String? name,
+    String? description,
+    PlatformInt64? unitId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          sse_encode_opt_String(name, serializer);
+          sse_encode_opt_String(description, serializer);
+          sse_encode_opt_box_autoadd_i_64(unitId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_storage_box,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiBoxesUpdateBoxConstMeta,
+        argValues: [id, name, description, unitId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiBoxesUpdateBoxConstMeta => const TaskConstMeta(
+    debugName: "update_box",
+    argNames: ["id", "name", "description", "unitId"],
+  );
+
+  @override
+  Future<Item> crateApiItemsUpdateItem({
+    required PlatformInt64 id,
+    String? name,
+    String? description,
+    PlatformInt64? quantity,
+    PlatformInt64? boxId,
+    Int64List? categoryIds,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          sse_encode_opt_String(name, serializer);
+          sse_encode_opt_String(description, serializer);
+          sse_encode_opt_box_autoadd_i_64(quantity, serializer);
+          sse_encode_opt_box_autoadd_i_64(boxId, serializer);
+          sse_encode_opt_list_prim_i_64_strict(categoryIds, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 23,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_item,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiItemsUpdateItemConstMeta,
+        argValues: [id, name, description, quantity, boxId, categoryIds],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiItemsUpdateItemConstMeta => const TaskConstMeta(
+    debugName: "update_item",
+    argNames: ["id", "name", "description", "quantity", "boxId", "categoryIds"],
+  );
+
+  @override
+  Future<Unit> crateApiUnitsUpdateUnit({
+    required PlatformInt64 id,
+    String? name,
+    String? description,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_i_64(id, serializer);
+          sse_encode_opt_String(name, serializer);
+          sse_encode_opt_String(description, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 24,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_findit_error,
+        ),
+        constMeta: kCrateApiUnitsUpdateUnitConstMeta,
+        argValues: [id, name, description],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiUnitsUpdateUnitConstMeta => const TaskConstMeta(
+    debugName: "update_unit",
+    argNames: ["id", "name", "description"],
+  );
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_i_64(raw);
+  }
+
+  @protected
+  Category dco_decode_category(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return Category(
+      id: dco_decode_i_64(arr[0]),
+      name: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  FinditError dco_decode_findit_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return FinditError_DbNotInitialized();
+      case 1:
+        return FinditError_Db(dco_decode_String(raw[1]));
+      case 2:
+        return FinditError_DuplicateName(
+          entity: dco_decode_String(raw[1]),
+          name: dco_decode_String(raw[2]),
+        );
+      case 3:
+        return FinditError_NotFound(
+          entity: dco_decode_String(raw[1]),
+          hint: dco_decode_String(raw[2]),
+        );
+      case 4:
+        return FinditError_Validation(dco_decode_String(raw[1]));
+      case 5:
+        return FinditError_Io(dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  Item dco_decode_item(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return Item(
+      id: dco_decode_i_64(arr[0]),
+      name: dco_decode_String(arr[1]),
+      description: dco_decode_String(arr[2]),
+      quantity: dco_decode_i_64(arr[3]),
+      photoPath: dco_decode_opt_String(arr[4]),
+      boxId: dco_decode_i_64(arr[5]),
+      categories: dco_decode_list_String(arr[6]),
+      createdAt: dco_decode_String(arr[7]),
+      updatedAt: dco_decode_String(arr[8]),
+    );
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<Category> dco_decode_list_category(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_category).toList();
+  }
+
+  @protected
+  List<Item> dco_decode_list_item(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_item).toList();
+  }
+
+  @protected
+  Int64List dco_decode_list_prim_i_64_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeInt64List(raw);
   }
 
   @protected
@@ -156,15 +1034,71 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<StorageBox> dco_decode_list_storage_box(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_storage_box).toList();
+  }
+
+  @protected
+  List<Unit> dco_decode_list_unit(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_unit).toList();
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  PlatformInt64? dco_decode_opt_box_autoadd_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_i_64(raw);
+  }
+
+  @protected
+  Int64List? dco_decode_opt_list_prim_i_64_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_list_prim_i_64_strict(raw);
+  }
+
+  @protected
+  StorageBox dco_decode_storage_box(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return StorageBox(
+      id: dco_decode_i_64(arr[0]),
+      slug: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      description: dco_decode_String(arr[3]),
+      unitId: dco_decode_i_64(arr[4]),
+      itemCount: dco_decode_i_64(arr[5]),
+      createdAt: dco_decode_String(arr[6]),
+      updatedAt: dco_decode_String(arr[7]),
+    );
+  }
+
+  @protected
   int dco_decode_u_8(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
   }
 
   @protected
-  void dco_decode_unit(dynamic raw) {
+  Unit dco_decode_unit(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
-    return;
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return Unit(
+      id: dco_decode_i_64(arr[0]),
+      name: dco_decode_String(arr[1]),
+      description: dco_decode_String(arr[2]),
+      boxCount: dco_decode_i_64(arr[3]),
+    );
   }
 
   @protected
@@ -175,10 +1109,216 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  PlatformInt64 sse_decode_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_i_64(deserializer));
+  }
+
+  @protected
+  Category sse_decode_category(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_i_64(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    return Category(id: var_id, name: var_name);
+  }
+
+  @protected
+  FinditError sse_decode_findit_error(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return FinditError_DbNotInitialized();
+      case 1:
+        var var_field0 = sse_decode_String(deserializer);
+        return FinditError_Db(var_field0);
+      case 2:
+        var var_entity = sse_decode_String(deserializer);
+        var var_name = sse_decode_String(deserializer);
+        return FinditError_DuplicateName(entity: var_entity, name: var_name);
+      case 3:
+        var var_entity = sse_decode_String(deserializer);
+        var var_hint = sse_decode_String(deserializer);
+        return FinditError_NotFound(entity: var_entity, hint: var_hint);
+      case 4:
+        var var_field0 = sse_decode_String(deserializer);
+        return FinditError_Validation(var_field0);
+      case 5:
+        var var_field0 = sse_decode_String(deserializer);
+        return FinditError_Io(var_field0);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  Item sse_decode_item(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_i_64(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_description = sse_decode_String(deserializer);
+    var var_quantity = sse_decode_i_64(deserializer);
+    var var_photoPath = sse_decode_opt_String(deserializer);
+    var var_boxId = sse_decode_i_64(deserializer);
+    var var_categories = sse_decode_list_String(deserializer);
+    var var_createdAt = sse_decode_String(deserializer);
+    var var_updatedAt = sse_decode_String(deserializer);
+    return Item(
+      id: var_id,
+      name: var_name,
+      description: var_description,
+      quantity: var_quantity,
+      photoPath: var_photoPath,
+      boxId: var_boxId,
+      categories: var_categories,
+      createdAt: var_createdAt,
+      updatedAt: var_updatedAt,
+    );
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<Category> sse_decode_list_category(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Category>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_category(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<Item> sse_decode_list_item(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Item>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_item(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getInt64List(len_);
+  }
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<StorageBox> sse_decode_list_storage_box(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <StorageBox>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_storage_box(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<Unit> sse_decode_list_unit(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <Unit>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_unit(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlatformInt64? sse_decode_opt_box_autoadd_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_i_64(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  Int64List? sse_decode_opt_list_prim_i_64_strict(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_list_prim_i_64_strict(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  StorageBox sse_decode_storage_box(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_i_64(deserializer);
+    var var_slug = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_description = sse_decode_String(deserializer);
+    var var_unitId = sse_decode_i_64(deserializer);
+    var var_itemCount = sse_decode_i_64(deserializer);
+    var var_createdAt = sse_decode_String(deserializer);
+    var var_updatedAt = sse_decode_String(deserializer);
+    return StorageBox(
+      id: var_id,
+      slug: var_slug,
+      name: var_name,
+      description: var_description,
+      unitId: var_unitId,
+      itemCount: var_itemCount,
+      createdAt: var_createdAt,
+      updatedAt: var_updatedAt,
+    );
   }
 
   @protected
@@ -188,8 +1328,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_decode_unit(SseDeserializer deserializer) {
+  Unit sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_i_64(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_description = sse_decode_String(deserializer);
+    var var_boxCount = sse_decode_i_64(deserializer);
+    return Unit(
+      id: var_id,
+      name: var_name,
+      description: var_description,
+      boxCount: var_boxCount,
+    );
   }
 
   @protected
@@ -199,15 +1349,114 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
-  }
-
-  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_i_64(
+    PlatformInt64 self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self, serializer);
+  }
+
+  @protected
+  void sse_encode_category(Category self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+  }
+
+  @protected
+  void sse_encode_findit_error(FinditError self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case FinditError_DbNotInitialized():
+        sse_encode_i_32(0, serializer);
+      case FinditError_Db(field0: final field0):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(field0, serializer);
+      case FinditError_DuplicateName(entity: final entity, name: final name):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(entity, serializer);
+        sse_encode_String(name, serializer);
+      case FinditError_NotFound(entity: final entity, hint: final hint):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(entity, serializer);
+        sse_encode_String(hint, serializer);
+      case FinditError_Validation(field0: final field0):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(field0, serializer);
+      case FinditError_Io(field0: final field0):
+        sse_encode_i_32(5, serializer);
+        sse_encode_String(field0, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_item(Item self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.description, serializer);
+    sse_encode_i_64(self.quantity, serializer);
+    sse_encode_opt_String(self.photoPath, serializer);
+    sse_encode_i_64(self.boxId, serializer);
+    sse_encode_list_String(self.categories, serializer);
+    sse_encode_String(self.createdAt, serializer);
+    sse_encode_String(self.updatedAt, serializer);
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_category(List<Category> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_category(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_item(List<Item> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_item(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_prim_i_64_strict(
+    Int64List self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putInt64List(self);
   }
 
   @protected
@@ -221,25 +1470,93 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_storage_box(
+    List<StorageBox> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_storage_box(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_unit(List<Unit> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_unit(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_i_64(
+    PlatformInt64? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_i_64(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_list_prim_i_64_strict(
+    Int64List? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_list_prim_i_64_strict(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_storage_box(StorageBox self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.id, serializer);
+    sse_encode_String(self.slug, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.description, serializer);
+    sse_encode_i_64(self.unitId, serializer);
+    sse_encode_i_64(self.itemCount, serializer);
+    sse_encode_String(self.createdAt, serializer);
+    sse_encode_String(self.updatedAt, serializer);
+  }
+
+  @protected
   void sse_encode_u_8(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint8(self);
   }
 
   @protected
-  void sse_encode_unit(void self, SseSerializer serializer) {
+  void sse_encode_unit(Unit self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_64(self.id, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_String(self.description, serializer);
+    sse_encode_i_64(self.boxCount, serializer);
   }
 
   @protected
   void sse_encode_i_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putInt32(self);
-  }
-
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
   }
 }

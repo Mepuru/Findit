@@ -37,6 +37,9 @@ dependencies:
   rust_lib_findit:
     path: rust_builder
   flutter_rust_bridge: 2.11.0
+  path_provider: ^2.1.4
+  # FRB 镜像带字段枚举需要（配合 dev 里的 freezed）。
+  freezed_annotation: ^2.4.4
 
 dev_dependencies:
   flutter_test:
@@ -50,6 +53,10 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   integration_test:
     sdk: flutter
+
+  # flutter_rust_bridge 镜像带字段枚举（FinditError）需要 freezed。
+  freezed: ^2.5.7
+  build_runner: ^2.4.13
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
