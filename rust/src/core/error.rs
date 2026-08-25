@@ -37,6 +37,18 @@ pub enum FinditError {
     /// 文件 / 目录 IO 错误。
     #[error("IO 错误：{0}")]
     Io(String),
+
+    /// AI 服务尚未配置（如未填写服务地址）。
+    #[error("AI 尚未配置：{0}")]
+    AiNotConfigured(String),
+
+    /// 网络层不可达：连接失败 / 超时 / DNS 解析失败等。
+    #[error("无法连接 AI 服务：{0}")]
+    AiUnreachable(String),
+
+    /// 服务可达但返回内容异常：HTTP 错误状态、模型输出无法解析等。
+    #[error("AI 模型输出异常：{0}")]
+    AiModelOutput(String),
 }
 
 impl From<rusqlite::Error> for FinditError {

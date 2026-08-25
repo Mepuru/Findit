@@ -1,5 +1,6 @@
 //! 纯业务逻辑层：零 flutter_rust_bridge 依赖，可独立 `cargo test`。
 
+pub mod ai;
 pub mod db;
 pub mod error;
 pub mod photo;
