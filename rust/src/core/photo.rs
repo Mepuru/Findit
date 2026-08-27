@@ -11,7 +11,7 @@
 use std::path::Path;
 
 use image::codecs::jpeg::JpegEncoder;
-use image::{DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, ImageReader};
 use rusqlite::Connection;
 use uuid::Uuid;
 
@@ -80,15 +80,101 @@ fn write_jpeg(path: &Path, img: &DynamicImage, quality: u8) -> FinditResult<()> 
     Ok(())
 }
 
+/// 解码尺寸上限（最长边，像素）：超过该上限的图片直接拒绝，
+/// 防止异常超大图把内存打爆（P-M7 的兜底防线）。
+pub const MAX_DECODE_EDGE: u32 = 16_384;
+
+/// 受限解码：JPEG 走 scale-down 快速降采样（1/2、1/4、1/8，P-M7），
+/// 避免全分辨率解码的内存与 CPU 峰值；其它格式先读头部尺寸，超限拒绝。
+fn decode_limited(raw: &[u8]) -> FinditResult<DynamicImage> {
+    let format = image::guess_format(raw)
+        .map_err(|e| FinditError::Validation(format!("无法识别图片格式：{e}")))?;
+
+    if format == image::ImageFormat::Jpeg {
+        if let Some(img) = try_decode_jpeg_scaled(raw)? {
+            return Ok(img);
+        }
+        // CMYK 等非常见输出格式：走下方全量解码兜底。
+    }
+
+    // 非 JPEG（或 JPEG 兜底）：先读头部尺寸，超限拒绝，避免全量解码。
+    let dims = ImageReader::new(std::io::Cursor::new(raw))
+        .with_guessed_format()
+        .map_err(|e| FinditError::Validation(format!("无法解析图片：{e}")))?
+        .into_dimensions()
+        .map_err(|e| FinditError::Validation(format!("无法解析图片尺寸：{e}")))?;
+    if dims.0.max(dims.1) > MAX_DECODE_EDGE {
+        return Err(FinditError::Validation(format!(
+            "照片尺寸过大（{0}×{1}，上限 {MAX_DECODE_EDGE} 像素）",
+            dims.0, dims.1
+        )));
+    }
+    image::load_from_memory(raw)
+        .map_err(|e| FinditError::Validation(format!("无法解析图片：{e}")))
+}
+
+/// JPEG 降采样解码：按最长边选择 1/2、1/4、1/8 缩放因子，
+/// 解码结果尺寸 ≈ 最长边 ≥ `MAIN_MAX_EDGE` 的最小档位。
+/// 返回 `None` 表示输出格式非 RGB/Luma（调用方全量解码兜底）。
+fn try_decode_jpeg_scaled(raw: &[u8]) -> FinditResult<Option<DynamicImage>> {
+    use jpeg_decoder::PixelFormat;
+
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::Cursor::new(raw));
+    decoder
+        .read_info()
+        .map_err(|e| FinditError::Validation(format!("无法解析 JPEG：{e}")))?;
+    let info = decoder
+        .info()
+        .ok_or_else(|| FinditError::Validation("JPEG 缺少头部信息".to_string()))?;
+    let (w, h) = (info.width as u32, info.height as u32);
+    if w.max(h) > MAX_DECODE_EDGE {
+        return Err(FinditError::Validation(format!(
+            "照片尺寸过大（{w}×{h}，上限 {MAX_DECODE_EDGE} 像素）"
+        )));
+    }
+
+    // 目标：降采样后最长边仍 ≥ 主图上限，避免二次放大。
+    // jpeg-decoder 0.3 的 `scale(requested_w, requested_h)` 自动选择
+    // 1/8、1/4、1/2、1 中「输出在任一轴 ≥ 请求尺寸」的最大降采样档位
+    // （内部 `choose_idct_size` 从最激进档位开始尝试），与旧 `set_scale`
+    // 循环的语义一致；请求尺寸取主图上限即可保证降采样后无需再放大。
+    if w.max(h) > MAIN_MAX_EDGE {
+        decoder
+            .scale(MAIN_MAX_EDGE as u16, MAIN_MAX_EDGE as u16)
+            .map_err(|e| FinditError::Validation(format!("JPEG 降采样配置失败：{e}")))?;
+    }
+
+    let pixels = decoder
+        .decode()
+        .map_err(|e| FinditError::Validation(format!("JPEG 解码失败：{e}")))?;
+    let info = decoder
+        .info()
+        .ok_or_else(|| FinditError::Validation("JPEG 解码后缺少尺寸信息".to_string()))?;
+    let (dw, dh) = (info.width as u32, info.height as u32);
+
+    match info.pixel_format {
+        PixelFormat::RGB24 => Ok(Some(DynamicImage::ImageRgb8(
+            image::RgbImage::from_raw(dw, dh, pixels)
+                .ok_or_else(|| FinditError::Io("JPEG 像素缓冲尺寸不一致".to_string()))?,
+        ))),
+        PixelFormat::L8 => Ok(Some(DynamicImage::ImageLuma8(
+            image::GrayImage::from_raw(dw, dh, pixels)
+                .ok_or_else(|| FinditError::Io("JPEG 像素缓冲尺寸不一致".to_string()))?,
+        ))),
+        _ => Ok(None),
+    }
+}
+
 /// 压缩管道（纯函数，不碰数据库）：
 /// 解码原始图片字节 → 主图（最长边 1600，q82）+ 缩略图（最长边 256，q70）
 /// → 写入 `photos_dir`，返回主图文件名 `{uuid}.jpg`。
+///
+/// P-M7：JPEG 输入走 scale-down 降采样解码，大图内存/CPU 峰值可控。
 pub fn save_photo_bytes(raw: &[u8], photos_dir: &Path) -> FinditResult<String> {
     if raw.is_empty() {
         return Err(FinditError::Validation("照片数据为空".to_string()));
     }
-    let img = image::load_from_memory(raw)
-        .map_err(|e| FinditError::Validation(format!("无法解析图片：{e}")))?;
+    let img = decode_limited(raw)?;
 
     let stem = Uuid::new_v4().to_string();
     let main_name = format!("{stem}.jpg");
@@ -147,20 +233,37 @@ pub fn thumb_full_path(file_name: &str) -> FinditResult<String> {
     photo_full_path(&thumb_file_name(file_name))
 }
 
-/// 保存物品照片：压缩落盘 → 更新 `items.photo_path` → 清理旧照片文件。
-/// 返回新主图文件名。
-pub fn save_item_photo(conn: &Connection, item_id: i64, raw: &[u8]) -> FinditResult<String> {
-    let photos_dir = db::photos_dir()?;
-    // 校验物品存在，并取旧照片路径。
-    let old_photo = repo::items::get_item(conn, item_id)?.photo_path;
+/// P-H1 三阶段保存的「阶段 1」（锁内，极短）：校验物品存在并取旧照片路径。
+/// 图片压缩不在此阶段执行，锁内只做一次主键查询。
+pub fn existing_item_photo(conn: &Connection, item_id: i64) -> FinditResult<Option<String>> {
+    Ok(repo::items::get_item(conn, item_id)?.photo_path)
+}
 
-    let new_name = save_photo_bytes(raw, &photos_dir)?;
-    repo::items::set_item_photo_path(conn, item_id, Some(&new_name))?;
-
+/// P-H1 三阶段保存的「阶段 3」（锁内，极短）：登记新照片路径并清理旧文件。
+/// 压缩落盘已在锁外完成，这里只做一次 UPDATE + 旧文件清理。
+pub fn register_item_photo(
+    conn: &Connection,
+    item_id: i64,
+    new_name: &str,
+    old_photo: Option<&str>,
+) -> FinditResult<()> {
+    repo::items::set_item_photo_path(conn, item_id, Some(new_name))?;
     // 旧文件清理失败不影响本次保存结果。
     if let Some(old_name) = old_photo {
-        let _ = delete_photo_files(&photos_dir, &old_name);
+        let _ = delete_photo_files(&db::photos_dir()?, old_name);
     }
+    Ok(())
+}
+
+/// 保存物品照片（组合入口，供测试与不关心锁边界的调用方使用）：
+/// 校验 → 压缩落盘 → 登记路径 → 清理旧文件。
+///
+/// 生产路径应改用三阶段编排（见 `crate::api::photos::save_item_photo`）：
+/// 「锁内取旧路径 → 锁外压缩 → 锁内登记」，避免压缩期间持有全局数据库锁。
+pub fn save_item_photo(conn: &Connection, item_id: i64, raw: &[u8]) -> FinditResult<String> {
+    let old_photo = existing_item_photo(conn, item_id)?;
+    let new_name = save_photo_bytes(raw, &db::photos_dir()?)?;
+    register_item_photo(conn, item_id, &new_name, old_photo.as_deref())?;
     Ok(new_name)
 }
 
@@ -181,6 +284,7 @@ mod tests {
     use super::*;
     use crate::core::db::migrations::run_migrations;
     use crate::core::repo::{boxes, units};
+    use image::ImageEncoder;
     use image::RgbaImage;
 
     /// 生成 w×h 的渐变测试图。
@@ -256,6 +360,44 @@ mod tests {
         let dir = temp_dir("portrait");
         let name = save_photo_bytes(&test_jpeg_bytes(900, 2000), &dir).unwrap();
         assert_eq!(dimensions(&dir, &name), (720, 1600));
+    }
+
+    #[test]
+    fn jpeg_scale_down_decode_reduces_resolution() {
+        // P-M7 回归：大 JPEG 应降采样解码（1/2），而非全分辨率解码。
+        let img = try_decode_jpeg_scaled(&test_jpeg_bytes(3200, 2400))
+            .unwrap()
+            .unwrap();
+        assert_eq!(img.dimensions(), (1600, 1200), "3200px 长边应降采样到 1/2");
+    }
+
+    #[test]
+    fn jpeg_scale_down_skipped_for_small_images() {
+        // 小图（≤ 主图上限）不应降采样，避免画质损失。
+        let img = try_decode_jpeg_scaled(&test_jpeg_bytes(900, 600))
+            .unwrap()
+            .unwrap();
+        assert_eq!(img.dimensions(), (900, 600));
+    }
+
+    #[test]
+    fn decode_limited_rejects_oversized_image() {
+        // P-M7 兜底：超上限尺寸（> 16384 长边）直接拒绝，避免内存打爆。
+        let big = image::RgbaImage::from_pixel(17_000, 10, image::Rgba([0u8, 0, 0, 255]));
+        let mut buf = Vec::new();
+        image::codecs::png::PngEncoder::new(&mut buf)
+            .write_image(
+                big.as_raw(),
+                17_000,
+                10,
+                image::ExtendedColorType::Rgba8,
+            )
+            .unwrap();
+        let dir = temp_dir("oversized");
+        assert!(matches!(
+            save_photo_bytes(&buf, &dir),
+            Err(FinditError::Validation(_))
+        ));
     }
 
     #[test]

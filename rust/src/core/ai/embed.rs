@@ -8,12 +8,13 @@
 
 use rusqlite::{params, Connection};
 
-use crate::core::ai::client::AiTransport;
-use crate::core::ai::config::{AiConfig, KEY_EMBEDDED_DIM, KEY_EMBEDDED_MODEL};
+use crate::core::ai::config::{KEY_EMBEDDED_DIM, KEY_EMBEDDED_MODEL};
 use crate::core::error::{FinditError, FinditResult};
 use crate::core::repo::load_item_categories;
 use crate::core::repo::settings::{get_setting, set_setting};
-use crate::core::search::semantic::{blob_to_embedding, embedding_to_blob};
+use crate::core::search::semantic::{
+    blob_to_embedding, embedding_to_blob, mark_embeddings_dirty,
+};
 
 /// 默认批量：每次 `/api/embed` 调用的物品条数。
 pub const DEFAULT_BATCH_SIZE: usize = 24;
@@ -63,6 +64,8 @@ pub fn pending_item_texts(conn: &Connection, limit: usize) -> FinditResult<Vec<(
 }
 
 /// 批量写入物品向量（BLOB）。返回写入条数。
+///
+/// 写入后使语义搜索内存索引缓存失效（P-H3：缓存版本 bump）。
 pub fn write_item_embeddings(conn: &Connection, pairs: &[(i64, Vec<f32>)]) -> FinditResult<usize> {
     let mut count = 0usize;
     for (item_id, vec) in pairs {
@@ -73,12 +76,18 @@ pub fn write_item_embeddings(conn: &Connection, pairs: &[(i64, Vec<f32>)]) -> Fi
         )?;
         count += 1;
     }
+    if count > 0 {
+        mark_embeddings_dirty();
+    }
     Ok(count)
 }
 
 /// 清空全部物品向量（模型/维度变更时先清空再重建）。返回受影响行数。
 pub fn clear_all_embeddings(conn: &Connection) -> FinditResult<u64> {
     let affected = conn.execute("UPDATE items SET embedding = NULL WHERE embedding IS NOT NULL", [])?;
+    if affected > 0 {
+        mark_embeddings_dirty();
+    }
     Ok(affected as u64)
 }
 
@@ -172,8 +181,8 @@ pub fn apply_backfill(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::ai::client::AiError;
-    use crate::core::ai::config::AiProvider;
+    use crate::core::ai::client::{AiError, AiTransport};
+    use crate::core::ai::config::{AiConfig, AiProvider};
     use crate::core::db::migrations::run_migrations;
     use crate::core::repo::{boxes, categories, items, units};
     use std::cell::RefCell;

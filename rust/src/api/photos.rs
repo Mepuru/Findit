@@ -1,13 +1,27 @@
 //! 物品照片 API（转发到 `core::photo`）。
 
-use crate::core::db::with_conn;
+use crate::core::db::{photos_dir, with_conn};
 use crate::core::error::FinditError;
 use crate::core::photo;
 
-/// 保存物品照片：压缩（主图 1600px/q82 + 缩略图 256px/q70）落盘，
-/// 更新 `items.photo_path` 并清理旧照片文件。返回新主图文件名。
+/// 保存物品照片（P-H1 三阶段，压缩不持全局数据库锁）：
+/// 1. 短锁：校验物品存在并取旧照片路径；
+/// 2. 锁外：压缩落盘（解码 + 缩放 + 编码，可能耗时数百毫秒至秒级）；
+/// 3. 短锁：登记 `photo_path` 并清理旧文件。
+///
+/// 拍照入库期间其它数据库操作（列表加载、搜索、录入）不再被阻塞。
+/// 返回新主图文件名。
 pub async fn save_item_photo(item_id: i64, bytes: Vec<u8>) -> Result<String, FinditError> {
-    with_conn(|conn| photo::save_item_photo(conn, item_id, &bytes))
+    // 阶段 1（短锁）：仅一次主键查询。
+    let old_photo = with_conn(|conn| photo::existing_item_photo(conn, item_id))?;
+
+    // 阶段 2（锁外）：压缩落盘。
+    let dir = photos_dir()?;
+    let new_name = photo::save_photo_bytes(&bytes, &dir)?;
+
+    // 阶段 3（短锁）：登记路径 + 清理旧文件。
+    with_conn(|conn| photo::register_item_photo(conn, item_id, &new_name, old_photo.as_deref()))?;
+    Ok(new_name)
 }
 
 /// 删除物品照片：清空 `photo_path` 并移除主图与缩略图文件。

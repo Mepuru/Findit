@@ -9,4 +9,5 @@ pub mod apply;
 pub mod client;
 pub mod config;
 pub mod embed;
+pub mod keystore;
 pub mod parse;

@@ -6,14 +6,19 @@
 //! - 超时分级：对话 60s、向量 30s（可按场景缩短）；
 //! - 仅网络类错误重试（默认 2 次，退避 1s / 3s）。
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use serde_json::{json, Value};
 
 use crate::core::ai::config::{AiConfig, AiProvider};
 
-/// 对话请求超时。
-pub const CHAT_TIMEOUT: Duration = Duration::from_secs(60);
+/// 对话请求超时（F6：从 60s 收紧到 20s，避免解析/探活长时间挂起；
+/// 可通过 [`HttpAiTransport::with_chat_timeout`] 覆盖）。
+pub const CHAT_TIMEOUT: Duration = Duration::from_secs(20);
 /// 向量请求超时。
 pub const EMBED_TIMEOUT: Duration = Duration::from_secs(30);
 /// 网络错误重试退避序列（重试 2 次：等 1s、再等 3s）。
@@ -220,8 +225,95 @@ where
 }
 
 // ---------------------------------------------------------------------------
+// 非阻塞退避（P-M6）
+// ---------------------------------------------------------------------------
+
+/// 非阻塞延迟：独立线程睡眠后在完成时唤醒 future。
+///
+/// flutter_rust_bridge 的异步线程池**不是** tokio 运行时，无法使用
+/// `tokio::time::sleep`；此实现只依赖 std，可在任何 executor 上工作，
+/// 重试退避不再占用 FRB worker 线程。
+#[derive(Debug)]
+struct Delay {
+    state: Arc<Mutex<DelayState>>,
+}
+
+#[derive(Debug, Default)]
+struct DelayState {
+    waker: Option<Waker>,
+    done: bool,
+}
+
+impl Delay {
+    fn new(dur: Duration) -> Self {
+        let state = Arc::new(Mutex::new(DelayState::default()));
+        let thread_state = Arc::clone(&state);
+        std::thread::spawn(move || {
+            std::thread::sleep(dur);
+            let mut s = thread_state.lock().expect("延迟状态互斥锁中毒");
+            s.done = true;
+            if let Some(w) = s.waker.take() {
+                w.wake();
+            }
+        });
+        Delay { state }
+    }
+}
+
+impl Future for Delay {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        let mut s = self.state.lock().expect("延迟状态互斥锁中毒");
+        if s.done {
+            Poll::Ready(())
+        } else {
+            s.waker = Some(cx.waker().clone());
+            Poll::Pending
+        }
+    }
+}
+
+/// 仅对网络类错误重试（异步版，P-M6）：退避等待通过 [`Delay`] 非阻塞完成，
+/// 不再用 `std::thread::sleep` 占用 FRB 异步线程池 worker。
+pub async fn retry_on_network_async<F, T>(mut op: F, backoffs: &[Duration]) -> Result<T, AiError>
+where
+    F: FnMut() -> Result<T, AiError>,
+{
+    let mut attempt = 0usize;
+    loop {
+        match op() {
+            Ok(v) => return Ok(v),
+            Err(e) if e.is_network() && attempt < backoffs.len() => {
+                Delay::new(backoffs[attempt]).await;
+                attempt += 1;
+            }
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // reqwest（blocking + rustls）实现
 // ---------------------------------------------------------------------------
+
+/// 进程内单例的 blocking HTTP 客户端（P-H2）。
+///
+/// reqwest 的 blocking Client 内部自带一个 tokio 运行时与连接池；
+/// 逐请求重建意味着每次都要新建运行时、丢弃连接池（无 keep-alive）、
+/// OpenAI 场景每次重新 TLS 握手。改为静态单例后连接与运行时全程复用。
+/// 超时仍按请求设置（`RequestBuilder::timeout`），客户端本身不设默认超时。
+fn shared_blocking_client() -> Result<&'static reqwest::blocking::Client, AiError> {
+    static CLIENT: LazyLock<Result<reqwest::blocking::Client, String>> = LazyLock::new(|| {
+        reqwest::blocking::Client::builder()
+            .build()
+            .map_err(|e| e.to_string())
+    });
+    match CLIENT.as_ref() {
+        Ok(client) => Ok(client),
+        Err(e) => Err(AiError::Network(format!("HTTP 客户端初始化失败：{e}"))),
+    }
+}
 
 /// 基于 reqwest 的真实传输层。
 ///
@@ -241,13 +333,19 @@ impl Default for HttpAiTransport {
 }
 
 impl HttpAiTransport {
-    /// 默认：对话 60s / 向量 30s / 网络错误重试 2 次。
+    /// 默认：对话 20s / 向量 30s / 网络错误重试 2 次。
     pub fn new() -> Self {
         HttpAiTransport {
             chat_timeout: CHAT_TIMEOUT,
             embed_timeout: EMBED_TIMEOUT,
             max_retries: RETRY_BACKOFFS.len(),
         }
+    }
+
+    /// 覆盖对话超时（F6：可配置，默认 [`CHAT_TIMEOUT`]）。
+    pub fn with_chat_timeout(mut self, timeout: Duration) -> Self {
+        self.chat_timeout = timeout;
+        self
     }
 
     /// 覆盖向量超时（如搜索查询向量希望更快失败降级）。
@@ -267,6 +365,8 @@ impl HttpAiTransport {
     }
 
     /// 发送一次 POST 并解析 JSON 响应（不含重试）。
+    ///
+    /// 复用进程内单例客户端（P-H2），超时按请求设置。
     fn post_once(
         &self,
         provider: AiProvider,
@@ -275,12 +375,9 @@ impl HttpAiTransport {
         body: &Value,
         timeout: Duration,
     ) -> Result<Value, AiError> {
-        let client = reqwest::blocking::Client::builder()
-            .timeout(timeout)
-            .build()
-            .map_err(|e| AiError::Network(format!("HTTP 客户端初始化失败：{e}")))?;
+        let client = shared_blocking_client()?;
 
-        let mut request = client.post(url).json(body);
+        let mut request = client.post(url).timeout(timeout).json(body);
         if provider == AiProvider::OpenAi && !api_key.trim().is_empty() {
             request = request.bearer_auth(api_key.trim());
         }
@@ -299,6 +396,61 @@ impl HttpAiTransport {
             let snippet: String = text.chars().take(120).collect();
             AiError::ModelOutput(format!("响应不是合法 JSON：{e}；原文前 120 字：{snippet}"))
         })
+    }
+
+    /// 异步对话（P-M6）：网络调用与重试退避均不阻塞 FRB worker。
+    pub async fn chat_async(
+        &self,
+        config: &AiConfig,
+        system: &str,
+        user: &str,
+    ) -> Result<String, AiError> {
+        if !config.is_configured() {
+            return Err(AiError::NotConfigured);
+        }
+        let url = chat_url(config);
+        let body = build_chat_body(config, system, user);
+        let timeout = self.chat_timeout;
+        let api_key = config.api_key.clone();
+        let backoffs: Vec<Duration> = self.backoffs().to_vec();
+        retry_on_network_async(
+            || {
+                let value = self.post_once(config.provider, &api_key, &url, &body, timeout)?;
+                extract_chat_content(config.provider, &value)
+            },
+            &backoffs,
+        )
+        .await
+    }
+
+    /// 异步批量向量（P-M6）：网络调用与重试退避均不阻塞 FRB worker。
+    pub async fn embed_async(
+        &self,
+        config: &AiConfig,
+        inputs: &[String],
+    ) -> Result<Vec<Vec<f32>>, AiError> {
+        if !config.is_configured() {
+            return Err(AiError::NotConfigured);
+        }
+        if inputs.is_empty() {
+            return Ok(Vec::new());
+        }
+        let url = embed_url(config);
+        let body = build_embed_body(config, inputs);
+        let timeout = self.embed_timeout;
+        let expected = inputs.len();
+        let embed_provider = config.effective_embed_provider();
+        let embed_api_key = config.effective_embed_api_key();
+        let backoffs: Vec<Duration> = self.backoffs().to_vec();
+        retry_on_network_async(
+            || {
+                let value =
+                    self.post_once(embed_provider, &embed_api_key, &url, &body, timeout)?;
+                extract_embeddings(embed_provider, &value, expected)
+            },
+            &backoffs,
+        )
+        .await
     }
 }
 
@@ -603,5 +755,106 @@ mod tests {
             ai_error_to_findit(AiError::ModelOutput("t".into())),
             FinditError::AiModelOutput(_)
         ));
+    }
+
+    // ------------------------------------------------------------------
+    // F6 / P-H2 / P-M6 回归
+    // ------------------------------------------------------------------
+
+    /// 测试用极简执行器：轮询 future 直到就绪（Delay 由独立线程唤醒，
+    /// 这里用 yield 兜底，退避时长设得很短）。
+    fn block_on<F: Future>(fut: F) -> F::Output {
+        use std::sync::Arc as StdArc;
+        use std::task::Wake;
+
+        struct NoopWaker;
+        impl Wake for NoopWaker {
+            fn wake(self: StdArc<Self>) {}
+        }
+        let waker = Waker::from(StdArc::new(NoopWaker));
+        let mut cx = Context::from_waker(&waker);
+        let mut fut = fut;
+        let mut fut = unsafe { Pin::new_unchecked(&mut fut) };
+        loop {
+            match fut.as_mut().poll(&mut cx) {
+                Poll::Ready(v) => return v,
+                Poll::Pending => std::thread::yield_now(),
+            }
+        }
+    }
+
+    #[test]
+    fn default_chat_timeout_is_20s_and_configurable() {
+        // F6：默认 20s，可通过 with_chat_timeout 覆盖。
+        assert_eq!(CHAT_TIMEOUT, Duration::from_secs(20));
+        let t = HttpAiTransport::new();
+        assert_eq!(t.chat_timeout, Duration::from_secs(20));
+        let custom = t.with_chat_timeout(Duration::from_secs(8));
+        assert_eq!(custom.chat_timeout, Duration::from_secs(8));
+    }
+
+    #[test]
+    fn retry_on_network_async_retries_only_network_errors() {
+        let backoffs = [Duration::from_millis(1), Duration::from_millis(1)];
+
+        // 前两次网络错误 → 第三次成功。
+        let mut calls = 0;
+        let result = block_on(retry_on_network_async(
+            || {
+                calls += 1;
+                if calls < 3 {
+                    Err(AiError::Network("connect refused".into()))
+                } else {
+                    Ok(42)
+                }
+            },
+            &backoffs,
+        ));
+        assert_eq!(result.unwrap(), 42);
+        assert_eq!(calls, 3);
+
+        // 服务端错误不重试。
+        let mut calls = 0;
+        let result: Result<(), AiError> = block_on(retry_on_network_async(
+            || {
+                calls += 1;
+                Err(AiError::Server("HTTP 500".into()))
+            },
+            &backoffs,
+        ));
+        assert!(matches!(result, Err(AiError::Server(_))));
+        assert_eq!(calls, 1);
+
+        // 网络错误耗尽重试次数后返回最后一次错误。
+        let mut calls = 0;
+        let result: Result<(), AiError> = block_on(retry_on_network_async(
+            || {
+                calls += 1;
+                Err(AiError::Network("timeout".into()))
+            },
+            &backoffs,
+        ));
+        assert!(matches!(result, Err(AiError::Network(_))));
+        assert_eq!(calls, 3);
+
+        // 空退避序列 = 不重试。
+        let mut calls = 0;
+        let result: Result<(), AiError> = block_on(retry_on_network_async(
+            || {
+                calls += 1;
+                Err(AiError::Network("x".into()))
+            },
+            &[],
+        ));
+        assert!(result.is_err());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn delay_completes_after_duration() {
+        // 非阻塞延迟：不 panic、按时完成。
+        let start = std::time::Instant::now();
+        block_on(Delay::new(Duration::from_millis(10)));
+        assert!(start.elapsed() >= Duration::from_millis(10));
     }
 }

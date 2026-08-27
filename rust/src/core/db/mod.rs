@@ -51,6 +51,12 @@ pub fn init_db(db_dir: &str) -> FinditResult<()> {
 
     migrations::run_migrations(&conn)?;
 
+    // 关键词搜索的 FTS5 索引（幂等建表 + 回填存量；恢复旧库后同样适用）。
+    crate::core::search::keyword::ensure_fts_schema(&conn)?;
+
+    // 语义搜索内存索引缓存随库重置（新库/恢复库的向量内容不同）。
+    crate::core::search::semantic::invalidate_embedding_cache();
+
     let mut guard = lock_db();
     *guard = Some(conn);
     Ok(())
@@ -61,6 +67,8 @@ pub fn close_db() {
     let mut guard = lock_db();
     *guard = None;
     *lock_photos_dir() = None;
+    // 语义搜索内存索引缓存随库关闭失效（恢复流程会重开新库）。
+    crate::core::search::semantic::invalidate_embedding_cache();
     // 注意：DB_DIR 保留，供备份恢复失败后重新打开原库使用。
 }
 

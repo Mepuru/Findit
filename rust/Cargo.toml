@@ -8,16 +8,21 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.11.0"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled", "functions"] }
 uuid = { version = "1", features = ["v4"] }
 thiserror = "2"
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+# 照片 JPEG scale-down 降采样解码（1/2、1/4、1/8），避免全分辨率解码的内存峰值。
+jpeg-decoder = { version = "0.3", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # 备份/恢复：只启用 deflate，避免引入多余的压缩算法依赖。
 zip = { version = "2", default-features = false, features = ["deflate"] }
 # rustls 强制：禁用 default features，避免 Android OpenSSL 交叉编译失败。
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
+# 密钥落盘加密（AES-256-GCM）。ring 已作为 rustls 的传递依赖锁定在 0.17.14，
+# 此处声明为直接依赖，不引入新下载；过渡方案，后续迁移系统 Keystore。
+ring = "0.17"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }

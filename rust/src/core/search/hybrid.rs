@@ -2,6 +2,12 @@
 //! 同一物品去重时语义优先。
 //!
 //! 本阶段查询向量由调用方提供（`Option<&[f32]>`）；无向量时只做关键词搜索。
+//!
+//! P-H3：向量打分已从数据库全量扫描改为**内存索引缓存**（见 `semantic` 模块）。
+//! [`search`] 在持锁闭包内一次性完成「取缓存索引 + 打分 + 合并」，
+//! 供测试与简单调用使用；`api::search` 走三阶段编排：
+//! 短锁取索引 → 锁外 `semantic::score_top_k` 打分 → 锁内 [`search_with_index`] 合并，
+//! 使最重的余弦打分完全脱离全局数据库锁。
 
 use std::collections::{HashMap, HashSet};
 
@@ -12,13 +18,13 @@ use crate::core::error::FinditResult;
 use crate::core::repo::load_item_categories;
 use crate::core::search::keyword;
 use crate::core::search::semantic::{
-    blob_to_embedding, cosine_similarity, passes_threshold, similarity_percent,
+    cached_embedding_index, score_top_k, similarity_percent, SEMANTIC_TOP_K,
 };
 
-/// 主搜索入口。
+/// 主搜索入口（持锁版本，供测试与无需锁外打分的调用方使用）。
 ///
-/// - `query_embedding` 为 `Some` 时：对全部有 `embedding` 的物品计算相似度，
-///   取 ≥ 阈值的按相似度降序作为语义结果（每条带 0-100 整数百分比）；
+/// - `query_embedding` 为 `Some` 时：经内存索引缓存对全部有 `embedding` 的物品打分，
+///   取 ≥ 阈值的按相似度降序作为语义结果（每条带 0-100 整数百分比），top-K 截断；
 /// - 关键词命中作为第二部分，剔除已被语义命中的物品；
 /// - 空查询且无向量时返回空列表。
 pub fn search(
@@ -26,26 +32,41 @@ pub fn search(
     query: &str,
     query_embedding: Option<&[f32]>,
 ) -> FinditResult<Vec<SearchResult>> {
+    let index = cached_embedding_index(conn)?;
+    let scored = query_embedding
+        .map(|v| score_top_k(&index, v, SEMANTIC_TOP_K))
+        .unwrap_or_default();
+    search_with_index(conn, query, &scored)
+}
+
+/// 合并搜索结果：语义（`scored` 已由调用方在锁外打分）在前，关键词在后。
+///
+/// `scored` 为 `(item_id, similarity)` 列表（已按相似度降序、top-K 截断）。
+/// 语义记录按 id 回查数据库；不存在的 id（缓存过期残留）被安全跳过，
+/// 避免因物品删除产生错位或脏数据。
+pub fn search_with_index(
+    conn: &Connection,
+    query: &str,
+    scored: &[(i64, f32)],
+) -> FinditResult<Vec<SearchResult>> {
     let mut seen: HashSet<i64> = HashSet::new();
     let mut results: Vec<SearchResult> = Vec::new();
 
-    if let Some(query_vec) = query_embedding {
-        for record in semantic_search(conn, query_vec)? {
-            seen.insert(record.0.id);
-            results.push(SearchResult {
-                id: record.0.id,
-                name: record.0.name,
-                description: record.0.description,
-                quantity: record.0.quantity,
-                photo_path: record.0.photo_path,
-                box_id: record.0.box_id,
-                categories: record.0.categories,
-                box_name: record.1,
-                unit_name: record.2,
-                matched_by: MatchedBy::Semantic,
-                similarity_percent: Some(record.3),
-            });
-        }
+    for record in semantic_records(conn, scored)? {
+        seen.insert(record.0.id);
+        results.push(SearchResult {
+            id: record.0.id,
+            name: record.0.name,
+            description: record.0.description,
+            quantity: record.0.quantity,
+            photo_path: record.0.photo_path,
+            box_id: record.0.box_id,
+            categories: record.0.categories,
+            box_name: record.1,
+            unit_name: record.2,
+            matched_by: MatchedBy::Semantic,
+            similarity_percent: Some(record.3),
+        });
     }
 
     for hit in keyword::search_keyword(conn, query)? {
@@ -70,45 +91,28 @@ pub fn search(
     Ok(results)
 }
 
-/// 语义通道：相似度 ≥ 阈值的物品，按相似度降序，附带整数百分比。
-fn semantic_search(
+/// 语义通道：把锁外打分的 `(id, sim)` 批量回查为完整物品记录，
+/// 附带所在箱/单元名与相似度百分比。已删除/不存在的 id 被跳过。
+fn semantic_records(
     conn: &Connection,
-    query_vec: &[f32],
+    scored: &[(i64, f32)],
 ) -> FinditResult<Vec<(Item, String, String, i32)>> {
-    let mut stmt = conn.prepare("SELECT id, embedding FROM items WHERE embedding IS NOT NULL")?;
-    let rows = stmt
-        .query_map([], |row| {
-            Ok((row.get::<_, i64>(0)?, row.get::<_, Vec<u8>>(1)?))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    // 相似度过滤 + 降序排序（同分按 id 稳定排序）。
-    let mut scored: Vec<(i64, f32)> = Vec::new();
-    for (id, blob) in rows {
-        let Some(vec) = blob_to_embedding(&blob) else {
-            continue; // BLOB 损坏：跳过。
-        };
-        if vec.len() != query_vec.len() {
-            continue; // 维度不一致：无法比较。
-        }
-        let sim = cosine_similarity(query_vec, &vec);
-        if passes_threshold(sim) {
-            scored.push((id, sim));
-        }
+    if scored.is_empty() {
+        return Ok(Vec::new());
     }
-    scored.sort_by(|a, b| {
-        b.1.partial_cmp(&a.1)
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then(a.0.cmp(&b.0))
-    });
-
     let ids: Vec<i64> = scored.iter().map(|(id, _)| *id).collect();
-    let records = load_items_with_location(conn, &ids)?;
+    let mut by_id: HashMap<i64, (Item, String, String)> = HashMap::new();
+    for (item, box_name, unit_name) in load_items_with_location(conn, &ids)? {
+        by_id.insert(item.id, (item, box_name, unit_name));
+    }
 
     Ok(scored
-        .into_iter()
-        .zip(records)
-        .map(|((_, sim), record)| (record.0, record.1, record.2, similarity_percent(sim)))
+        .iter()
+        .filter_map(|(id, sim)| {
+            by_id
+                .remove(id)
+                .map(|(item, box_name, unit_name)| (item, box_name, unit_name, similarity_percent(*sim)))
+        })
         .collect())
 }
 
@@ -185,6 +189,9 @@ mod tests {
     use crate::core::search::semantic::embedding_to_blob;
 
     fn setup() -> Connection {
+        // 每个测试使用独立的临时库，先清空进程内向量索引缓存，
+        // 避免上个测试的缓存污染本测试（P-H3）。
+        crate::core::search::semantic::invalidate_embedding_cache();
         let conn = Connection::open_in_memory().unwrap();
         conn.pragma_update(None, "foreign_keys", "ON").unwrap();
         run_migrations(&conn).unwrap();
@@ -311,5 +318,18 @@ mod tests {
         fixture(&conn);
         assert!(search(&conn, "", None).unwrap().is_empty());
         assert!(search(&conn, "  ", None).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_with_index_skips_stale_deleted_ids() {
+        // P-H3 回归：内存缓存未随删除失效时，锁外打分可能携带已删除 id，
+        // 合并阶段必须跳过而非错位配对。
+        let conn = setup();
+        let (wrench_id, _) = fixture(&conn);
+        let scored: Vec<(i64, f32)> = vec![(wrench_id, 1.0), (999_999, 1.0)];
+        let results = search_with_index(&conn, "", &scored).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].id, wrench_id);
+        assert_eq!(results[0].matched_by, MatchedBy::Semantic);
     }
 }

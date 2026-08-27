@@ -1,9 +1,11 @@
 //! AI API 薄壳：配置、探活、一句话解析与应用、查询向量、回填与重建。
 //!
 //! 所有业务逻辑在 `core::ai`；本层只做转发 + 全局状态编排。
-//! 锁边界铁律：网络调用（`transport.embed`）绝不发生在 `with_conn`
-//! 持锁闭包内——回填按「锁内取一批待办 → 释放锁做网络 → 锁内写回」三段执行。
+//! 锁边界铁律：网络调用（`transport.embed` / `embed_async`）绝不发生在
+//! `with_conn` 持锁闭包内——回填按「锁内取一批待办 → 释放锁做网络 →
+//! 锁内写回」三段执行。异步路径（P-M6）连重试退避都不阻塞 FRB worker。
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -31,6 +33,29 @@ const TEST_CACHE_TTL: Duration = Duration::from_secs(60);
 const QUERY_EMBED_TIMEOUT: Duration = Duration::from_secs(3);
 
 static LAST_TEST: Mutex<Option<(Instant, AiTestResult)>> = Mutex::new(None);
+
+/// 向量补齐/重建单飞互斥（P-M4）：
+/// 防止「写入触发回填」「启动回填」「手动重建」并发执行时重复拉取
+/// 同一批待处理物品，或回填与重建互相踩踏。
+static BACKFILL_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
+
+/// RAII 释放单飞标记；任何退出路径（成功/失败）都保证复位。
+struct BackfillGuard;
+
+impl Drop for BackfillGuard {
+    fn drop(&mut self) {
+        BACKFILL_IN_FLIGHT.store(false, Ordering::Release);
+    }
+}
+
+/// 尝试获取单飞标记：已被占用时返回 `None`。
+fn try_acquire_backfill() -> Option<BackfillGuard> {
+    if BACKFILL_IN_FLIGHT.swap(true, Ordering::AcqRel) {
+        None
+    } else {
+        Some(BackfillGuard)
+    }
+}
 
 // ---------------------------------------------------------------------------
 // 配置
@@ -84,7 +109,10 @@ pub async fn test_ai_connection() -> Result<AiTestResult, FinditError> {
     }
 
     let transport = HttpAiTransport::new();
-    match transport.chat(&config, "你是探活助手。", "请只输出 JSON：{\"ok\":true}") {
+    match transport
+        .chat_async(&config, "你是探活助手。", "请只输出 JSON：{\"ok\":true}")
+        .await
+    {
         Ok(_) => {
             result.chat_ok = true;
             result.chat_message = format!("对话正常（模型：{}）", config.chat_model);
@@ -95,7 +123,7 @@ pub async fn test_ai_connection() -> Result<AiTestResult, FinditError> {
     if !config.is_configured() && !config.has_separate_embed_service() {
         result.embed_message = "未配置向量服务地址".to_string();
     } else {
-        match transport.embed(&config, &["探活测试".to_string()]) {
+        match transport.embed_async(&config, &["探活测试".to_string()]).await {
             Ok(_) => {
                 result.embed_ok = true;
                 result.embed_message = format!("向量正常（模型：{}）", config.embed_model);
@@ -160,7 +188,7 @@ pub async fn get_ai_status() -> Result<AiStatus, FinditError> {
 // 一句话解析与应用
 // ---------------------------------------------------------------------------
 
-fn parse_via_ai(text: &str, kind: IntentKind) -> Result<ParsedIntent, FinditError> {
+async fn parse_via_ai(text: &str, kind: IntentKind) -> Result<ParsedIntent, FinditError> {
     let text = text.trim();
     if text.is_empty() {
         return Err(FinditError::Validation("请输入要解析的内容".to_string()));
@@ -173,7 +201,8 @@ fn parse_via_ai(text: &str, kind: IntentKind) -> Result<ParsedIntent, FinditErro
     }
     let transport = HttpAiTransport::new();
     let raw = transport
-        .chat(&config, PARSE_SYSTEM_PROMPT, text)
+        .chat_async(&config, PARSE_SYSTEM_PROMPT, text)
+        .await
         .map_err(ai_error_to_findit)?;
     match parse_intent_from_output(&raw) {
         Ok(intent) => Ok(intent),
@@ -182,7 +211,8 @@ fn parse_via_ai(text: &str, kind: IntentKind) -> Result<ParsedIntent, FinditErro
         Err(AiError::ModelOutput(detail)) => {
             let repair = build_repair_retry_prompt(kind, text, &raw, &detail);
             let retried = transport
-                .chat(&config, PARSE_SYSTEM_PROMPT, &repair)
+                .chat_async(&config, PARSE_SYSTEM_PROMPT, &repair)
+                .await
                 .map_err(ai_error_to_findit)?;
             parse_intent_from_output(&retried).map_err(ai_error_to_findit)
         }
@@ -192,12 +222,12 @@ fn parse_via_ai(text: &str, kind: IntentKind) -> Result<ParsedIntent, FinditErro
 
 /// 一句话 → 结构化意图（建档或修改，由模型判断）。
 pub async fn parse_quick_add(text: String) -> Result<ParsedIntent, FinditError> {
-    parse_via_ai(&text, IntentKind::CreateItem)
+    parse_via_ai(&text, IntentKind::CreateItem).await
 }
 
 /// 一句话 → 修改意图（与 `parse_quick_add` 同一解析链路）。
 pub async fn parse_ai_modify(text: String) -> Result<ParsedIntent, FinditError> {
-    parse_via_ai(&text, IntentKind::ModifyItem)
+    parse_via_ai(&text, IntentKind::ModifyItem).await
 }
 
 /// 确认建档：单元/箱按名称自动创建或复用同名实体（单事务）。
@@ -228,7 +258,7 @@ pub async fn generate_query_embedding(text: String) -> Result<Option<Vec<f32>>, 
     let transport = HttpAiTransport::new()
         .with_embed_timeout(QUERY_EMBED_TIMEOUT)
         .with_max_retries(0);
-    match transport.embed(&config, &[text]) {
+    match transport.embed_async(&config, &[text]).await {
         Ok(mut vecs) => Ok(vecs.pop()),
         Err(_) => Ok(None),
     }
@@ -240,6 +270,9 @@ pub async fn generate_query_embedding(text: String) -> Result<Option<Vec<f32>>, 
 /// 每轮三段式：锁内取一批待处理文本 → 释放锁后做网络调用 →
 /// 锁内写回（写回前重查维度一致性）。网络期间全局锁不持有，
 /// 不会冻结其它数据库操作；中断后重跑即可继续（以数据库为待办源）。
+///
+/// P-M4 单飞：已有回填/重建在跑时直接返回 `Ok(0)`（由写路径触发的
+/// 自动回填静默跳过，避免重复拉取同一批数据）。
 pub async fn backfill_pending_embeddings() -> Result<i32, FinditError> {
     let config = with_conn(load_ai_config)?;
     if !config.is_configured() {
@@ -247,13 +280,16 @@ pub async fn backfill_pending_embeddings() -> Result<i32, FinditError> {
             "请先在设置中填写 AI 服务地址".to_string(),
         ));
     }
+    let Some(_guard) = try_acquire_backfill() else {
+        return Ok(0);
+    };
     let transport = HttpAiTransport::new();
     let total = with_conn(count_items)?;
     let max_rounds = (total as usize) / DEFAULT_BATCH_SIZE + 4;
 
     let mut processed = 0i32;
     for _ in 0..max_rounds {
-        let n = backfill_one_round(&transport, &config)?;
+        let n = backfill_one_round_async(&transport, &config).await?;
         if n == 0 {
             break;
         }
@@ -262,7 +298,32 @@ pub async fn backfill_pending_embeddings() -> Result<i32, FinditError> {
     Ok(processed)
 }
 
-/// 单轮三段式回填，返回本轮写入条数（0 = 已无待处理）。
+/// 单轮三段式回填（异步版，P-M6），返回本轮写入条数（0 = 已无待处理）。
+///
+/// 网络调用位于两段 `with_conn` 之间，绝不持锁；重试退避同样不阻塞
+/// FRB worker（见 `client::retry_on_network_async`）。
+async fn backfill_one_round_async(
+    transport: &HttpAiTransport,
+    config: &AiConfig,
+) -> Result<i32, FinditError> {
+    // 第一段（锁内）：取一批待处理文本，随即释放锁。
+    let pending = with_conn(|conn| pending_item_texts(conn, DEFAULT_BATCH_SIZE))?;
+    if pending.is_empty() {
+        return Ok(0);
+    }
+
+    // 第二段（锁外）：网络调用。
+    let texts: Vec<String> = pending.iter().map(|(_, t)| t.clone()).collect();
+    let vecs = transport
+        .embed_async(config, &texts)
+        .await
+        .map_err(ai_error_to_findit)?;
+
+    // 第三段（锁内）：写回（内部重查维度一致性）。
+    with_conn(|conn| apply_backfill(conn, &pending, vecs, &config.embed_model))
+}
+
+/// 单轮三段式回填（同步版），供保持同步签名的 [`rebuild_embeddings`] 复用。
 ///
 /// 网络调用位于两段 `with_conn` 之间，绝不持锁。
 fn backfill_one_round(transport: &HttpAiTransport, config: &AiConfig) -> Result<i32, FinditError> {
@@ -285,6 +346,11 @@ fn backfill_one_round(transport: &HttpAiTransport, config: &AiConfig) -> Result<
 /// 重建全部向量：清空后经 [`StreamSink`] 流式推送进度（done/total）。
 /// Dart 端监听流；函数最终返回处理汇总。
 /// 与 [`backfill_pending_embeddings`] 同样按三段式执行，网络调用不持锁。
+///
+/// 签名保持同步（P-M6 约束）：FRB 2.11 生成代码依赖同步签名，
+/// 改 async 需重新生成 `frb_generated.rs`（本环境无 codegen）。
+/// 内部网络调用会阻塞 FRB 异步 worker，但重建是低频显式操作，
+/// 可接受；查询/回填路径已全部走异步版。
 pub fn rebuild_embeddings(sink: StreamSink<EmbedProgress>) -> Result<EmbedProgressSummary, FinditError> {
     let config = with_conn(load_ai_config)?;
     if !config.is_configured() {
@@ -292,6 +358,12 @@ pub fn rebuild_embeddings(sink: StreamSink<EmbedProgress>) -> Result<EmbedProgre
             "请先在设置中填写 AI 服务地址".to_string(),
         ));
     }
+    // P-M4 单飞：与回填互斥；重建是显式操作，占用时直接报错提示稍后重试。
+    let Some(_guard) = try_acquire_backfill() else {
+        return Err(FinditError::Validation(
+            "向量补齐或重建正在进行中，请稍后重试".to_string(),
+        ));
+    };
 
     let total = with_conn(|conn| {
         let total = count_items(conn)? as i32;
