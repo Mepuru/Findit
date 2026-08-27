@@ -3,10 +3,16 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/ai.dart' as ai;
 import 'package:findit/src/rust/api/model.dart';
+import 'package:findit/src/rust/api/settings.dart' as settings_api;
 import 'package:findit/src/rust/core/ai/config.dart';
 
 import '../errors.dart';
 import '../theme.dart';
+
+/// 语义回填开关的设置 key：与安全线 `rust/src/core/ai/config.rs` 中
+/// `semantic_backfill_enabled()` 读取的键保持一致（默认关闭）。
+/// 在安全线 API 就绪前，本页通过通用设置机制读写同一 key。
+const _semanticBackfillKey = 'semantic_backfill_enabled';
 
 /// AI 设置：对话模型、向量模型（支持独立服务配置）、语义向量的重建与补齐。
 class AiSettingsPage extends StatefulWidget {
@@ -37,6 +43,9 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
   bool _saving = false;
   bool _backfilling = false;
 
+  /// 「语义搜索与向量回填」开关（默认关闭，经通用设置机制持久化）。
+  bool _semanticBackfillEnabled = false;
+
   /// 重建向量进度；非空表示正在重建。
   EmbedProgress? _rebuildProgress;
   StreamSubscription<EmbedProgress>? _rebuildSub;
@@ -64,9 +73,11 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
       final results = await Future.wait([
         ai.getAiConfig(),
         ai.getAiStatus(),
+        settings_api.getSetting(key: _semanticBackfillKey),
       ]);
       final config = results[0] as AiConfig;
       final status = results[1] as AiStatus;
+      final backfillRaw = results[2] as String?;
       if (!mounted) return;
       setState(() {
         _provider = config.provider;
@@ -78,6 +89,7 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
         _embedProvider = config.embedProvider;
         _embedBaseUrl.text = config.embedBaseUrl;
         _embedApiKey.text = config.embedApiKey;
+        _semanticBackfillEnabled = backfillRaw == '1';
         _status = status;
         _loading = false;
       });
@@ -85,6 +97,22 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
       if (!mounted) return;
       setState(() => _loading = false);
       showErrorSnack(context, e);
+    }
+  }
+
+  /// 语义回填开关：立即生效并持久化（Rust 侧读取同一 key 控制回填行为）。
+  Future<void> _setSemanticBackfill(bool value) async {
+    setState(() => _semanticBackfillEnabled = value);
+    try {
+      await settings_api.setSetting(
+        key: _semanticBackfillKey,
+        value: value ? '1' : '0',
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _semanticBackfillEnabled = !value);
+        showErrorSnack(context, e);
+      }
     }
   }
 
@@ -308,6 +336,20 @@ class _AiSettingsPageState extends State<AiSettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        SwitchListTile(
+                          title: const Text('语义搜索与向量回填'),
+                          subtitle: Text(
+                            _semanticBackfillEnabled
+                                ? '新增/修改物品后会自动补齐语义向量'
+                                : '关闭后仅手动「补齐」或「重建」向量',
+                            style: TextStyle(
+                                fontSize: 12, color: palette.inkSoft),
+                          ),
+                          value: _semanticBackfillEnabled,
+                          contentPadding: EdgeInsets.zero,
+                          onChanged: _setSemanticBackfill,
+                        ),
+                        const Divider(height: 16),
                         SwitchListTile(
                           title: const Text('使用与对话相同的服务'),
                           subtitle: Text(

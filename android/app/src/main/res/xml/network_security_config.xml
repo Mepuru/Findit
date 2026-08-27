@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  隐私优先网络配置（S-M2）：
+  - 默认禁止一切明文流量（cleartextTrafficPermitted=false）；
+  - 仅对本机回环地址（模拟器宿主机 10.0.2.2 / localhost）放行明文；
+  - 局域网 Ollama 的明文 HTTP 由 Rust 核心直连（不经过 Android 网络栈），
+    不受本配置约束；密钥传输安全由 config.rs 的「http + API Key 拒绝」校验保证。
+  - 说明：本配置同时替代原 AndroidManifest 中的 usesCleartextTraffic="true" 全局开关。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+    </domain-config>
+</network-security-config>

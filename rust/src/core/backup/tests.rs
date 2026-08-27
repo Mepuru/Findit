@@ -480,7 +480,9 @@ fn export_scrubs_api_key_from_snapshot() {
     {
         let conn = open_test_db(&db_dir);
         seed_data(&conn, &db_dir);
+        // 对话 Key 与向量独立 Key 都属于密钥类设置，导出时必须全部剔除。
         settings::set_setting(&conn, "ai_api_key", "sk-secret-123").unwrap();
+        settings::set_setting(&conn, "ai_embed_api_key", "sk-embed-456").unwrap();
         export_backup(&conn, &db_dir, &zip_path, None).unwrap();
     }
 
@@ -492,14 +494,24 @@ fn export_scrubs_api_key_from_snapshot() {
     let snapshot_path = root.join("snapshot-check.db");
     fs::write(&snapshot_path, &db_bytes).unwrap();
     let conn = Connection::open(&snapshot_path).unwrap();
-    let value: String = conn
+    // 对话 API Key 必须为空。
+    let chat: String = conn
         .query_row(
             "SELECT value FROM app_settings WHERE key = 'ai_api_key'",
             [],
             |r| r.get(0),
         )
         .unwrap();
-    assert!(value.is_empty(), "备份快照中的 API Key 必须为空");
+    assert!(chat.is_empty(), "备份快照中的对话 API Key 必须为空");
+    // 向量 API Key 必须为空（S-H3 回归：此前遗漏 ai_embed_api_key）。
+    let embed: String = conn
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'ai_embed_api_key'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(embed.is_empty(), "备份快照中的向量 API Key 必须为空");
     // 其它设置不受影响。
     let other: String = conn
         .query_row(

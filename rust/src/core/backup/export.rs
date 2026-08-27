@@ -17,7 +17,7 @@ use uuid::Uuid;
 use zip::write::{SimpleFileOptions, ZipWriter};
 use zip::CompressionMethod;
 
-use crate::core::ai::config::KEY_API_KEY;
+use crate::core::ai::config::{KEY_API_KEY, KEY_EMBED_API_KEY};
 use crate::core::backup::{
     DB_ENTRY_NAME, FORMAT_VERSION, MANIFEST_ENTRY_NAME, PHOTOS_ENTRY_PREFIX, STREAM_BUF_SIZE,
 };
@@ -52,7 +52,7 @@ pub struct Snapshot {
 /// 1. `wal_checkpoint(TRUNCATE)` 把 WAL 数据落盘，避免快照遗漏最近写入；
 /// 2. 统计三表计数（写入 manifest）；
 /// 3. `VACUUM INTO` 生成一致性副本（不阻塞在线读写）；
-/// 4. 在快照副本上剔除 AI API Key（密钥不随备份分发）。
+/// 4. 在快照副本上剔除全部密钥类设置（密钥不随备份分发）。
 pub fn create_snapshot(conn: &Connection) -> FinditResult<Snapshot> {
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
     let (items_count, boxes_count, units_count) = count_rows(conn)?;
@@ -64,7 +64,7 @@ pub fn create_snapshot(conn: &Connection) -> FinditResult<Snapshot> {
     )?;
 
     // 剔除密钥：快照已是独立文件，直接打开副本清理，不影响在线库。
-    if let Err(e) = scrub_api_key(&path) {
+    if let Err(e) = scrub_snapshot_secrets(&path) {
         let _ = std::fs::remove_file(&path);
         return Err(e);
     }
@@ -77,15 +77,28 @@ pub fn create_snapshot(conn: &Connection) -> FinditResult<Snapshot> {
     })
 }
 
-/// 把快照库中的 AI API Key 置空，避免密钥随备份分发。
-fn scrub_api_key(snapshot_path: &Path) -> FinditResult<()> {
+/// 备份中必须剔除的密钥类设置键（白名单，与 `ai::config` 常量保持一致；
+/// 新增密钥类设置时必须同步加入，并补充备份剔除测试）。
+pub(crate) const SECRET_SETTING_KEYS: [&str; 2] = [KEY_API_KEY, KEY_EMBED_API_KEY];
+
+/// 把数据库中的全部密钥类设置置空，避免密钥随备份分发（S-H3）。
+///
+/// 供导出快照剔除与恢复后防御性清理共用；对已加密落盘的密钥同样生效。
+pub(crate) fn scrub_secrets(conn: &Connection) -> FinditResult<()> {
+    for key in SECRET_SETTING_KEYS {
+        conn.execute(
+            "UPDATE app_settings SET value = '' WHERE key = ?1",
+            params![key],
+        )?;
+    }
+    Ok(())
+}
+
+/// 打开快照库副本并剔除密钥类设置。
+fn scrub_snapshot_secrets(snapshot_path: &Path) -> FinditResult<()> {
     let conn = Connection::open(snapshot_path)
         .map_err(|e| FinditError::Io(format!("无法打开快照库：{e}")))?;
-    conn.execute(
-        "UPDATE app_settings SET value = '' WHERE key = ?1",
-        params![KEY_API_KEY],
-    )?;
-    Ok(())
+    scrub_secrets(&conn)
 }
 
 /// 把快照与照片打包为备份 zip（无需数据库连接，可在锁外执行）。

@@ -186,6 +186,14 @@ pub fn restore_backup(
         return Err(e);
     }
 
+    // 防御（S-H3）：恢复的库若残留密钥类设置（如旧版导出的备份未剔除），
+    // 立即置空，保证恢复后的库不含任何密钥。导出端已保证剔除，此处失败不阻断。
+    if let Ok(restored_conn) = Connection::open(db_dir.join(DB_ENTRY_NAME)) {
+        if let Err(e) = crate::core::backup::export::scrub_secrets(&restored_conn) {
+            eprintln!("[findit] 恢复后清理密钥设置失败：{e}");
+        }
+    }
+
     if let Some(f) = on_progress {
         f("swap", 1, 1);
     }

@@ -66,5 +66,32 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- S-M5：权限用途描述（缺失会导致相机/麦克风/相册调用崩溃）。 -->
+	<key>NSCameraUsageDescription</key>
+	<string>用于扫描收纳箱二维码标签（Findit 箱标签）。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于语音快速录入物品信息。</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于选择物品照片保存到本地档案。</string>
+	<!-- S-M5：仅放行本地网络（局域网 Ollama）明文，不放行任意明文流量。 -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<!-- F1：注册 findit://box/* 深链（收纳箱二维码标签）。 -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.kurikana.findit</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>findit</string>
+			</array>
+		</dict>
+	</array>
+	<!-- S-M3：文档目录排除 iCloud 备份由 AppDelegate.swift 在启动时设置
+	     NSURLIsExcludedFromBackupKey（Info.plist 无法表达文件属性）。 -->
 </dict>
 </plist>
