@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import '../errors.dart';
 import '../theme.dart';
 import 'ai_settings_page.dart';
+import 'categories_page.dart';
 
 /// 统一设置页：数据备份 / 恢复 + AI 设置入口。
 class SettingsPage extends StatefulWidget {
@@ -218,7 +219,13 @@ class _SettingsPageState extends State<SettingsPage> {
       if (picked.path != null) {
         await File(picked.path!).copy(staging.path);
       } else {
-        await staging.writeAsBytes(await picked.readAsBytes());
+        // SAF content:// URI：流式分块写入暂存文件，避免整包 readAsBytes 入内存（P-M5）。
+        final sink = staging.openWrite();
+        try {
+          await sink.addStream(picked.readAsByteStream());
+        } finally {
+          await sink.close();
+        }
       }
 
       RestoreSummary? summary;
@@ -311,6 +318,25 @@ class _SettingsPageState extends State<SettingsPage> {
                       color: palette.inkSoft,
                     ),
                   ),
+                  const SizedBox(height: 6),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.warning_amber_rounded,
+                          size: 15, color: palette.persimmon),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '备份文件未加密，包含物品与照片信息，请妥善保管导出的 zip 文件。',
+                          style: TextStyle(
+                            fontSize: 12,
+                            height: 1.5,
+                            color: palette.persimmon,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 14),
                   Row(
                     children: [
@@ -332,6 +358,25 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          _sectionTitle('数据管理'),
+          Card(
+            child: ListTile(
+              leading: Icon(Icons.label_outline_rounded, color: palette.pine),
+              title: const Text('分类管理'),
+              subtitle: Text(
+                '重命名或删除分类标签',
+                style: TextStyle(fontSize: 12, color: palette.inkSoft),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CategoriesPage()),
               ),
             ),
           ),

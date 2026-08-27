@@ -111,7 +111,8 @@ pub fn apply_create(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Qu
 // 修改
 // ---------------------------------------------------------------------------
 
-/// 应用修改意图（单事务）。目标物品为 `target_query` 关键词搜索的第一个命中。
+/// 应用修改意图（单事务）。目标物品按 [`resolve_target`] 定位：优先精确同名，
+/// 否则取关键词搜索的第一个命中。
 pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<ModifyResult> {
     let query = required(intent.target_query.as_deref(), "目标物品描述")?;
 
@@ -127,11 +128,7 @@ pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Mo
 
     let tx = conn.unchecked_transaction()?;
 
-    let hits = keyword::search_keyword(&tx, &query)?;
-    let target = hits.into_iter().next().ok_or_else(|| FinditError::NotFound {
-        entity: "物品".to_string(),
-        hint: format!("没有匹配「{query}」的物品"),
-    })?;
+    let target = resolve_target(&tx, &query)?;
 
     let mut changes: Vec<String> = Vec::new();
     let mut box_out: Option<EntityRef> = None;
@@ -142,11 +139,11 @@ pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Mo
         // 目标单元：显式指定（不存在则创建）或沿用物品当前所在单元。
         let unit_id = match &intent.new_unit_name {
             Some(unit_name) => find_or_create_unit(&tx, unit_name)?.id,
-            None => unit_of_box(&tx, target.item.box_id)?,
+            None => unit_of_box(&tx, target.box_id)?,
         };
         let box_ref = ensure_box(&tx, unit_id, &box_name)?;
-        if box_ref.id != target.item.box_id {
-            items::update_item(&tx, target.item.id, None, None, None, Some(box_ref.id), None)?;
+        if box_ref.id != target.box_id {
+            items::update_item(&tx, target.id, None, None, None, Some(box_ref.id), None)?;
             changes.push(format!("移动到「{}」", box_ref.name));
         }
         box_out = Some(box_ref);
@@ -156,12 +153,12 @@ pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Mo
         let unit_id = find_or_create_unit(&tx, unit_name)?.id;
         let current_box_name: String = tx.query_row(
             "SELECT name FROM storage_boxes WHERE id = ?1",
-            params![target.item.box_id],
+            params![target.box_id],
             |row| row.get(0),
         )?;
         let box_ref = ensure_box_in_unit(&tx, unit_id, &current_box_name)?;
-        if box_ref.id != target.item.box_id {
-            items::update_item(&tx, target.item.id, None, None, None, Some(box_ref.id), None)?;
+        if box_ref.id != target.box_id {
+            items::update_item(&tx, target.id, None, None, None, Some(box_ref.id), None)?;
             changes.push(format!("移动到「{}」", box_ref.name));
         }
         box_out = Some(box_ref);
@@ -179,7 +176,7 @@ pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Mo
         }
         items::update_item(
             &tx,
-            target.item.id,
+            target.id,
             new_name.clone(),
             new_description.clone(),
             new_quantity,
@@ -201,7 +198,7 @@ pub fn apply_modify(conn: &Connection, intent: &ParsedIntent) -> FinditResult<Mo
         }
     }
 
-    let item = items::get_item(&tx, target.item.id)?;
+    let item = items::get_item(&tx, target.id)?;
     tx.commit()?;
 
     Ok(ModifyResult {
@@ -223,6 +220,30 @@ fn required(raw: Option<&str>, field: &str) -> FinditResult<String> {
         )));
     }
     Ok(value)
+}
+
+/// 定位修改目标物品：
+/// 1. 优先精确同名（`name = query`，多个同名按 id 取最早登记的一件）；
+/// 2. 无精确同名时回退关键词搜索的第一个命中。
+///
+/// 精确同名优先让「快速录入」预览页在用户选定候选后（把 `target_query`
+/// 置为候选物品的确切名称）能命中用户指定的那一件，而不是依赖关键词排序。
+fn resolve_target(conn: &Connection, query: &str) -> FinditResult<Item> {
+    let exact: Vec<i64> = conn
+        .prepare("SELECT id FROM items WHERE name = ?1 ORDER BY id")?
+        .query_map(params![query], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    if let Some(id) = exact.into_iter().next() {
+        return items::get_item(conn, id);
+    }
+    let hits = keyword::search_keyword(conn, query)?;
+    hits.into_iter()
+        .next()
+        .map(|h| h.item)
+        .ok_or_else(|| FinditError::NotFound {
+            entity: "物品".to_string(),
+            hint: format!("没有匹配「{query}」的物品"),
+        })
 }
 
 /// 按名称查找单元，不存在则创建。
@@ -643,7 +664,7 @@ mod tests {
     #[test]
     fn modify_unit_only_creates_same_name_box_in_target_unit() {
         let conn = setup();
-        let (_unit_id, item_id) = fixture_for_modify(&conn);
+        let (_unit_id, _item_id) = fixture_for_modify(&conn);
         let balcony = units::create_unit(&conn, "阳台", "").unwrap();
 
         let mut intent = ParsedIntent::new_modify();
@@ -681,6 +702,39 @@ mod tests {
         let result = apply_modify(&conn, &intent).unwrap();
         assert_eq!(result.item.name, "一字螺丝刀");
         assert_eq!(result.item.quantity, 9);
+    }
+
+    #[test]
+    fn modify_prefers_exact_name_match() {
+        let conn = setup();
+        let unit = units::create_unit(&conn, "柜子", "").unwrap();
+        let box_ = boxes::create_box(&conn, unit.id, "箱子", "").unwrap();
+        // 模糊命中会优先按名称排序命中「大扳手」，精确同名应选中「扳手」。
+        let _big = items::create_item(&conn, box_.id, "大扳手", "", 1, &[]).unwrap();
+        let exact = items::create_item(&conn, box_.id, "扳手", "", 1, &[]).unwrap();
+
+        let mut intent = ParsedIntent::new_modify();
+        intent.target_query = Some("扳手".to_string());
+        intent.new_quantity = Some(3);
+        let result = apply_modify(&conn, &intent).unwrap();
+        assert_eq!(result.item.id, exact.id);
+        assert_eq!(result.item.quantity, 3);
+    }
+
+    #[test]
+    fn modify_duplicate_exact_names_picks_earliest() {
+        let conn = setup();
+        let unit = units::create_unit(&conn, "柜子", "").unwrap();
+        let box_ = boxes::create_box(&conn, unit.id, "箱子", "").unwrap();
+        let first = items::create_item(&conn, box_.id, "充电宝", "", 1, &[]).unwrap();
+        let second = items::create_item(&conn, box_.id, "充电宝", "", 2, &[]).unwrap();
+
+        let mut intent = ParsedIntent::new_modify();
+        intent.target_query = Some("充电宝".to_string());
+        intent.new_quantity = Some(5);
+        let result = apply_modify(&conn, &intent).unwrap();
+        assert_eq!(result.item.id, first.id);
+        assert_ne!(result.item.id, second.id);
     }
 
     #[test]

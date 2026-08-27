@@ -5,24 +5,28 @@ import 'package:flutter/services.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
     show Int64List;
 import 'package:image_picker/image_picker.dart';
-import 'package:findit/src/rust/api/ai.dart' as ai_api;
 import 'package:findit/src/rust/api/boxes.dart' as boxes_api;
 import 'package:findit/src/rust/api/categories.dart' as categories_api;
 import 'package:findit/src/rust/api/items.dart' as api;
 import 'package:findit/src/rust/api/model.dart';
 import 'package:findit/src/rust/api/photos.dart' as photos_api;
+import 'package:findit/src/rust/api/units.dart' as units_api;
 
 import '../errors.dart';
 import '../theme.dart';
+import '../widgets/backfill.dart';
 import '../widgets/box_qr_sheet.dart';
 import '../widgets/common.dart';
 import 'photo_viewer_page.dart';
 
 /// 第三级：某个收纳箱内的物品列表。
 class ItemsPage extends StatefulWidget {
-  const ItemsPage({super.key, required this.boxId});
+  const ItemsPage({super.key, required this.boxId, this.highlightItemId});
 
   final int boxId;
+
+  /// 从搜索结果直达时高亮定位的物品 id；`null` 表示普通进入。
+  final int? highlightItemId;
 
   @override
   State<ItemsPage> createState() => _ItemsPageState();
@@ -36,10 +40,20 @@ class _ItemsPageState extends State<ItemsPage> {
   /// item_id → 照片本地路径（列表缩略图 + 大图）。
   final Map<int, ({String thumb, String full})> _photoPaths = {};
 
+  /// 物品卡片的 GlobalKey（用于搜索结果直达时滚动定位）。
+  final Map<int, GlobalKey> _itemKeys = {};
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
     _reload();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _reload() async {
@@ -51,32 +65,68 @@ class _ItemsPageState extends State<ItemsPage> {
       final box = results[0] as StorageBox;
       final items = results[1] as List<Item>;
 
-      // 解析照片本地路径；文件缺失时仅不展示。
+      // 解析照片本地路径（并发解析；文件缺失时仅不展示）。
       final photos = <int, ({String thumb, String full})>{};
-      for (final item in items) {
-        final fileName = item.photoPath;
-        if (fileName == null) continue;
-        try {
-          photos[item.id] = (
-            thumb: await photos_api.getThumbFullPath(fileName: fileName),
-            full: await photos_api.getPhotoFullPath(fileName: fileName),
-          );
-        } catch (_) {}
-      }
+      await Future.wait([
+        for (final item in items)
+          if (item.photoPath != null)
+            () async {
+              try {
+                final paths = await Future.wait([
+                  photos_api.getThumbFullPath(fileName: item.photoPath!),
+                  photos_api.getPhotoFullPath(fileName: item.photoPath!),
+                ]);
+                photos[item.id] = (
+                  thumb: paths[0],
+                  full: paths[1],
+                );
+              } catch (_) {}
+            }(),
+      ]);
 
       if (!mounted) return;
       setState(() {
         _box = box;
         _items = items;
+        _itemKeys
+          ..clear()
+          ..addEntries(items.map((i) => MapEntry(i.id, GlobalKey())));
         _photoPaths
           ..clear()
           ..addAll(photos);
         _loadError = null;
       });
+      _scrollToHighlight();
     } catch (e) {
       if (!mounted) return;
       setState(() => _loadError = e);
     }
+  }
+
+  /// 搜索结果直达：列表构建完成后滚动到目标物品并让其保持高亮。
+  void _scrollToHighlight() {
+    final targetId = widget.highlightItemId;
+    final items = _items;
+    if (targetId == null || items == null || !mounted) return;
+    final index = items.indexWhere((i) => i.id.toInt() == targetId);
+    if (index < 0) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (index >= 6 && _scrollController.hasClients) {
+        _scrollController.jumpTo(
+          (index * 76.0)
+              .clamp(0.0, _scrollController.position.maxScrollExtent),
+        );
+      }
+      final ctx = _itemKeys[targetId]?.currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(
+          ctx,
+          duration: const Duration(milliseconds: 250),
+          alignment: 0.3,
+        );
+      }
+    });
   }
 
   Future<void> _openCreateSheet() {
@@ -93,29 +143,38 @@ class _ItemsPageState extends State<ItemsPage> {
       isScrollControlled: true,
       builder: (sheetContext) => _ItemFormSheet(
         item: item,
+        boxId: widget.boxId,
         onPhotoChanged: _reload,
-        onSubmit: (name, description, quantity, categoryIds) async {
+        onSubmit:
+            (name, description, quantity, categoryIds, boxId, photoBytes) async {
           if (item == null) {
-            await api.createItem(
-              boxId: widget.boxId,
+            final created = await api.createItem(
+              boxId: boxId,
               name: name,
               description: description,
               quantity: quantity,
               categoryIds: categoryIds,
             );
+            // 建档时已选照片：物品创建后立即留档（选图时已限制尺寸/质量）。
+            if (photoBytes != null) {
+              await photos_api.saveItemPhoto(
+                itemId: created.id,
+                bytes: photoBytes,
+              );
+            }
           } else {
             await api.updateItem(
               id: item.id,
               name: name,
               description: description,
               quantity: quantity,
+              boxId: boxId,
               categoryIds: categoryIds,
             );
           }
           await _reload();
-          // 物品写入后异步补齐语义向量；失败静默忽略（启动/手动补齐兜底）。
-          // ignore: unawaited_futures
-          ai_api.backfillPendingEmbeddings().catchError((_) => 0);
+          // 写入触发的向量回填做防抖合并，避免每次写入立即发起网络调用。
+          scheduleBackfill();
         },
       ),
     );
@@ -211,12 +270,16 @@ class _ItemsPageState extends State<ItemsPage> {
         ),
         Expanded(
           child: ListView.separated(
+            controller: _scrollController,
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 96),
             itemCount: items.length,
             separatorBuilder: (context, index) => const SizedBox(height: 10),
             itemBuilder: (context, index) => _ItemCard(
+              key: _itemKeys[items[index].id],
               item: items[index],
               photoThumb: _photoPaths[items[index].id]?.thumb,
+              highlighted:
+                  items[index].id.toInt() == widget.highlightItemId,
               onPhotoTap: () => _openPhotoViewer(items[index]),
               onEdit: () => _openEditSheet(items[index]),
               onDelete: () => _delete(items[index]),
@@ -230,11 +293,13 @@ class _ItemsPageState extends State<ItemsPage> {
 
 class _ItemCard extends StatelessWidget {
   const _ItemCard({
+    super.key,
     required this.item,
     required this.photoThumb,
     required this.onPhotoTap,
     required this.onEdit,
     required this.onDelete,
+    this.highlighted = false,
   });
 
   final Item item;
@@ -244,6 +309,9 @@ class _ItemCard extends StatelessWidget {
   final VoidCallback onPhotoTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+
+  /// 搜索结果直达定位的高亮标记（卡片描边 + 底色提亮）。
+  final bool highlighted;
 
   Widget _tagIcon(BuildContext context) => Container(
         width: 42,
@@ -261,6 +329,13 @@ class _ItemCard extends StatelessWidget {
     final palette = context.palette;
     final thumb = photoThumb;
     return Card(
+      color: highlighted ? palette.persimmon.withValues(alpha: 0.08) : null,
+      shape: highlighted
+          ? RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: palette.persimmon, width: 1.5),
+            )
+          : null,
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
         onTap: onEdit,
@@ -377,21 +452,27 @@ class _ItemCard extends StatelessWidget {
   }
 }
 
-/// 物品表单：名称、备注、数量、分类多选（支持行内新建分类）；
-/// 编辑态另含照片区（拍照/选图/替换/删除/大图预览）。
+/// 物品表单：名称、备注、数量、所在收纳箱、分类多选（支持行内新建分类）；
+/// 编辑态另含照片区（拍照/选图/替换/删除/大图预览），建档态支持先选照片、保存后留档。
 class _ItemFormSheet extends StatefulWidget {
   const _ItemFormSheet({
     required this.item,
+    required this.boxId,
     required this.onSubmit,
     this.onPhotoChanged,
   });
 
   final Item? item;
+
+  /// 表单打开时所在的收纳箱 id（作为「所在收纳箱」选择器的初始值）。
+  final int boxId;
   final Future<void> Function(
     String name,
     String description,
     int quantity,
     Int64List categoryIds,
+    int boxId,
+    Uint8List? photoBytes,
   ) onSubmit;
 
   /// 照片变更（新增/替换/删除）后回调，用于刷新外层列表。
@@ -412,6 +493,15 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
   bool _busy = false;
   Object? _categoriesError;
 
+  /// 「所在收纳箱」选择器：全单元平铺选项（单元名 / 箱名）。
+  List<({int id, String label})> _boxOptions = [];
+  int _boxId = 0;
+  bool _boxesError = false;
+
+  /// 建档态待保存的照片字节（保存物品后立即留档）。
+  Uint8List? _pendingPhotoBytes;
+  final bool _photoPicking = false;
+
   /// 当前照片文件名（跟随保存/删除操作更新）。
   String? _photoPath;
   bool _photoBusy = false;
@@ -431,7 +521,35 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     if (_photoPath != null) {
       _thumbFuture = photos_api.getThumbFullPath(fileName: _photoPath!);
     }
+    _boxId = widget.boxId;
     _loadCategories();
+    _loadBoxes();
+  }
+
+  /// 加载「所在收纳箱」选项：所有单元下全部收纳箱（支持跨单元移动）。
+  Future<void> _loadBoxes() async {
+    try {
+      final units = await units_api.listUnits();
+      final options = <({int id, String label})>[];
+      for (final unit in units) {
+        final boxes = await boxes_api.listBoxes(unitId: unit.id);
+        for (final b in boxes) {
+          options.add((id: b.id.toInt(), label: '${unit.name} / ${b.name}'));
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _boxOptions = options;
+        _boxesError = false;
+        // 当前箱不存在（极端情况）时回退到第一个可用箱。
+        if (!options.any((o) => o.id == widget.boxId)) {
+          _boxId = options.isEmpty ? widget.boxId : options.first.id;
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _boxesError = true);
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -488,6 +606,8 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
         _descController.text.trim(),
         quantity,
         Int64List.fromList(_selected.toList()..sort()),
+        _boxId,
+        _pendingPhotoBytes,
       );
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
@@ -506,11 +626,16 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
   // ---------- 照片 ----------
 
   /// 拍照或从相册选图 → 交给 Rust 压缩落盘。
+  /// 选图时限制最长边与质量（P-M7），降低原图字节数后再过桥传输。
   Future<void> _pickAndSavePhoto(ImageSource source) async {
     final item = widget.item;
     if (item == null || _photoBusy) return;
     try {
-      final picked = await ImagePicker().pickImage(source: source);
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
       if (picked == null) return;
       final bytes = await picked.readAsBytes();
       setState(() => _photoBusy = true);
@@ -573,6 +698,88 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
     } catch (e) {
       if (mounted) showErrorSnack(context, e);
     }
+  }
+
+  /// 建档态选图：先暂存字节，保存物品后一并留档（F7）。
+  /// 选图时限制最长边与质量（P-M7），降低内存占用与过桥传输量。
+  Future<void> _pickCreatePhoto(ImageSource source) async {
+    if (_photoPicking) return;
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: source,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() => _pendingPhotoBytes = bytes);
+    } catch (e) {
+      if (mounted) showErrorSnack(context, e);
+    }
+  }
+
+  /// 建档态照片区：预览已选图片 + 拍照/相册/移除。
+  Widget _buildCreatePhotoArea() {
+    final palette = context.palette;
+    final bytes = _pendingPhotoBytes;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 88,
+          height: 88,
+          decoration: BoxDecoration(
+            color: palette.chipFill,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: palette.cardLine),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: bytes != null
+              ? Image.memory(bytes, fit: BoxFit.cover)
+              : Icon(
+                  Icons.photo_camera_outlined,
+                  color: palette.inkSoft,
+                ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: _photoPicking
+                    ? null
+                    : () => _pickCreatePhoto(ImageSource.camera),
+                icon: const Icon(Icons.photo_camera, size: 16),
+                label: Text(bytes != null ? '重新拍照' : '拍照'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _photoPicking
+                    ? null
+                    : () => _pickCreatePhoto(ImageSource.gallery),
+                icon: const Icon(Icons.photo_library_outlined, size: 16),
+                label: const Text('相册'),
+              ),
+              if (bytes != null)
+                TextButton.icon(
+                  onPressed: () => setState(() => _pendingPhotoBytes = null),
+                  icon: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: palette.danger,
+                  ),
+                  label: Text(
+                    '移除',
+                    style: TextStyle(color: palette.danger),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   /// 照片区：左侧缩略图（可点大图）+ 右侧操作按钮。
@@ -718,20 +925,16 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            if (isEdit) ...[
-              Text('照片留档', style: Theme.of(context).textTheme.titleSmall),
-              const SizedBox(height: 8),
-              _buildPhotoArea(),
-              const SizedBox(height: 16),
-            ] else ...[
-              Text(
-                '保存物品后可在编辑页拍照留档。',
-                style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                      color: palette.inkSoft,
-                    ),
-              ),
-              const SizedBox(height: 16),
-            ],
+            Text(
+              isEdit ? '照片留档' : '照片（可选）',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            if (isEdit)
+              _buildPhotoArea()
+            else
+              _buildCreatePhotoArea(),
+            const SizedBox(height: 16),
             TextField(
               controller: _nameController,
               autofocus: !isEdit,
@@ -753,6 +956,48 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               decoration: const InputDecoration(labelText: '数量'),
             ),
+            const SizedBox(height: 12),
+            if (_boxesError)
+              Text(
+                '收纳箱列表加载失败，无法移动物品。',
+                style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                      color: palette.danger,
+                    ),
+              )
+            else if (_boxOptions.isEmpty)
+              const SizedBox(
+                height: 48,
+                child: Center(
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              )
+            else
+              DropdownButtonFormField<int>(
+                initialValue: _boxId,
+                decoration: const InputDecoration(
+                  labelText: '所在收纳箱',
+                  helperText: '可移动到其它单元/收纳箱（无需 AI）',
+                ),
+                isExpanded: true,
+                items: [
+                  for (final o in _boxOptions)
+                    DropdownMenuItem(
+                      value: o.id,
+                      child: Text(
+                        o.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) setState(() => _boxId = v);
+                },
+              ),
             const SizedBox(height: 18),
             Text(
               '分类（可多选）',

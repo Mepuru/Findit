@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/ai.dart' as ai_api;
 import 'package:findit/src/rust/api/model.dart';
+import 'package:findit/src/rust/api/photos.dart' as photos_api;
 import 'package:findit/src/rust/api/search.dart' as api;
 
 import '../errors.dart';
@@ -11,10 +13,10 @@ import '../theme.dart';
 import '../widgets/common.dart';
 import 'items_page.dart';
 
-/// 全局搜索：关键词 + 语义双通道。
+/// 全局搜索：关键词 + 语义双通道（同一查询只执行一次混合搜索）。
 ///
-/// 关键词搜索与查询向量生成并发进行：先展示关键词结果，
-/// 向量到达后再补充语义结果重排（向量失败/未配置则保持纯关键词）。
+/// 先取查询向量（3s 上限，失败/未配置返回 null 降级为纯关键词），
+/// 再把关键词 + 语义合并为一次 [`searchItems`] 调用（Rust 侧去重重排）。
 class SearchPage extends StatefulWidget {
   const SearchPage({super.key});
 
@@ -34,6 +36,25 @@ class _SearchPageState extends State<SearchPage> {
   _SearchState _state = _SearchState.idle;
   List<SearchResult> _results = const [];
   Object? _error;
+
+  /// AI 是否已配置（决定空态引导是否宣传语义搜索）。
+  bool _aiConfigured = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAiStatus();
+  }
+
+  Future<void> _loadAiStatus() async {
+    try {
+      final status = await ai_api.getAiStatus();
+      if (!mounted) return;
+      setState(() => _aiConfigured = status.configured);
+    } catch (_) {
+      // 状态不可用时保持未配置展示。
+    }
+  }
 
   @override
   void dispose() {
@@ -64,23 +85,16 @@ class _SearchPageState extends State<SearchPage> {
       _error = null;
     });
     try {
-      // 向量生成与关键词搜索并发：不等向量就先出关键词结果，
-      // AI 不可达时搜索不再被超时阻塞。
-      final embeddingFuture = _safeQueryEmbedding(query);
-      final keywordResults = await api.searchItems(query: query);
+      // 只执行一次混合搜索：先取查询向量（未配置/失败/超时返回 null），
+      // 再一次性调用关键词+语义合并搜索，避免同一查询的重复检索。
+      final embedding = await _safeQueryEmbedding(query);
       if (!mounted || seq != _seq) return;
-      setState(() {
-        _state = _SearchState.loaded;
-        _results = keywordResults;
-      });
-      // 向量到达后补充语义结果（去重后重排展示）。
-      final embedding = await embeddingFuture;
-      if (!mounted || seq != _seq || embedding == null) return;
-      final merged =
+      final results =
           await api.searchItems(query: query, embedding: embedding);
       if (!mounted || seq != _seq) return;
       setState(() {
-        _results = merged;
+        _state = _SearchState.loaded;
+        _results = results;
       });
     } catch (e) {
       if (!mounted || seq != _seq) return;
@@ -101,9 +115,13 @@ class _SearchPageState extends State<SearchPage> {
   }
 
   void _openResult(SearchResult result) {
+    // 直达目标物品：打开所在收纳箱并高亮定位该物品。
     Navigator.of(context)
         .push(MaterialPageRoute(
-            builder: (_) => ItemsPage(boxId: result.boxId.toInt())))
+            builder: (_) => ItemsPage(
+                  boxId: result.boxId.toInt(),
+                  highlightItemId: result.id.toInt(),
+                )))
         .then((_) {
       if (!mounted) return;
       // 返回后结果可能过期，用当前输入重新检索。
@@ -162,7 +180,7 @@ class _SearchPageState extends State<SearchPage> {
   Widget _buildBody() {
     switch (_state) {
       case _SearchState.idle:
-        return const _IdleHint();
+        return _IdleHint(aiConfigured: _aiConfigured);
       case _SearchState.loading:
         return const Padding(
           padding: EdgeInsets.only(top: 48),
@@ -218,7 +236,10 @@ class _SearchPageState extends State<SearchPage> {
 
 /// 空查询引导：档案卡片风格的检索提示。
 class _IdleHint extends StatelessWidget {
-  const _IdleHint();
+  const _IdleHint({required this.aiConfigured});
+
+  /// AI 是否已配置：决定语义搜索提示是「已上线」还是「需配置 AI」。
+  final bool aiConfigured;
 
   @override
   Widget build(BuildContext context) {
@@ -242,7 +263,10 @@ class _IdleHint extends StatelessWidget {
         _hintRow('🧰', '试试搜「工具」', '命中分类名同样有效'),
         _hintRow('🔤', '大小写无所谓', '「drill」也能找到「Power Drill」'),
         _hintRow('🧩', '多词逐条满足', '「蓝色 箱子」两个词都要命中'),
-        _hintRow('🧠', '语义搜索已上线', '搜「修水管的」也能找到「扳手」'),
+        if (aiConfigured)
+          _hintRow('🧠', '语义搜索已上线', '搜「修水管的」也能找到「扳手」')
+        else
+          _hintRow('🧠', '配置 AI 后可开启语义搜索', '当前为关键词匹配，搜「修水管的」找不到「扳手」'),
       ],
     );
   }
@@ -357,7 +381,7 @@ class _DashPainter extends CustomPainter {
   bool shouldRepaint(_DashPainter oldDelegate) => oldDelegate.color != color;
 }
 
-/// 单条搜索结果卡片：名称 / 描述 / 分类标签 / 所在位置，
+/// 单条搜索结果卡片：缩略图 / 名称 / 描述 / 分类标签 / 所在位置，
 /// 语义命中额外带「匹配度 N%」柿子橙徽章。
 class _ResultCard extends StatelessWidget {
   const _ResultCard({required this.result, required this.onTap});
@@ -374,54 +398,121 @@ class _ResultCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-          child: Column(
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      result.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+              _ResultThumb(photoPath: result.photoPath),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            result.name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                        ),
+                        if (isSemantic && result.similarityPercent != null)
+                          _SimilarityBadge(percent: result.similarityPercent!),
+                        if (!isSemantic)
+                          Icon(Icons.chevron_right_rounded,
+                              color: palette.inkSoft.withValues(alpha: 0.6)),
+                      ],
                     ),
-                  ),
-                  if (isSemantic && result.similarityPercent != null)
-                    _SimilarityBadge(percent: result.similarityPercent!),
-                  if (!isSemantic)
-                    Icon(Icons.chevron_right_rounded,
-                        color: palette.inkSoft.withValues(alpha: 0.6)),
-                ],
-              ),
-              if (result.description.isNotEmpty) ...[
-                const SizedBox(height: 3),
-                Text(
-                  result.description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall!.copyWith(
-                        color: palette.inkSoft,
+                    if (result.description.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        result.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall!.copyWith(
+                              color: palette.inkSoft,
+                            ),
                       ),
+                    ],
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        for (final cat in result.categories) _TagChip(text: cat),
+                        _LocationChip(
+                          text: '${result.unitName} · ${result.boxName}',
+                        ),
+                        if (result.quantity > 1)
+                          _TagChip(text: '×${result.quantity}'),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  for (final cat in result.categories) _TagChip(text: cat),
-                  _LocationChip(
-                    text: '${result.unitName} · ${result.boxName}',
-                  ),
-                  if (result.quantity > 1)
-                    _TagChip(text: '×${result.quantity}'),
-                ],
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 搜索结果缩略图：解析物品照片路径后展示；
+/// 无照片或加载失败时回退到标签图标。
+class _ResultThumb extends StatefulWidget {
+  const _ResultThumb({required this.photoPath});
+
+  final String? photoPath;
+
+  @override
+  State<_ResultThumb> createState() => _ResultThumbState();
+}
+
+class _ResultThumbState extends State<_ResultThumb> {
+  String? _thumbPath;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolve();
+  }
+
+  Future<void> _resolve() async {
+    final name = widget.photoPath;
+    if (name == null) return;
+    try {
+      final path = await photos_api.getThumbFullPath(fileName: name);
+      if (!mounted) return;
+      setState(() => _thumbPath = path);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _failed = true);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    final path = _thumbPath;
+    return Container(
+      width: 44,
+      height: 44,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: palette.chipFill,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: path != null && !_failed
+          ? Image.file(
+              File(path),
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) =>
+                  const Center(child: Text('🏷️', style: TextStyle(fontSize: 20))),
+            )
+          : const Center(child: Text('🏷️', style: TextStyle(fontSize: 20))),
     );
   }
 }

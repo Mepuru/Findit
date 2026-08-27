@@ -1,11 +1,18 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/ai.dart' as ai;
+import 'package:findit/src/rust/api/model.dart';
+import 'package:findit/src/rust/api/search.dart' as search_api;
 import 'package:findit/src/rust/core/ai/parse.dart';
+import 'package:findit/src/rust/core/error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
 import '../errors.dart';
 import '../theme.dart';
+import '../widgets/backfill.dart';
+import 'ai_settings_page.dart';
 
 /// AI 快速录入：一句话 → 解析预览（可编辑修正）→ 确认后写库。
 ///
@@ -41,13 +48,39 @@ class _QuickAddPageState extends State<QuickAddPage> {
   Object? _error;
   String _summary = '';
 
+  /// 修改意图的候选目标物品（按 `target_query` 关键词检索，供预览选择）。
+  List<SearchResult> _candidates = const [];
+  int? _selectedCandidateId;
+  bool _candidatesLoading = false;
+  Object? _candidatesError;
+  Timer? _candidatesDebounce;
+
+  /// 解析期间用户点击「取消」标记：pending 的解析结果将被丢弃。
+  bool _parseCancelled = false;
+
   // ------------------ 语音输入 ------------------
   final SpeechToText _speech = SpeechToText();
   bool _listening = false;
   bool _speechReady = false;
 
   @override
+  void initState() {
+    super.initState();
+    // 目标物品描述变化后（防抖）重新检索候选，保证选择与输入一致。
+    _targetQuery.addListener(_onTargetQueryChanged);
+  }
+
+  void _onTargetQueryChanged() {
+    if (_phase != _Phase.preview || _kind != IntentKind.modifyItem) return;
+    _candidatesDebounce?.cancel();
+    _candidatesDebounce =
+        Timer(const Duration(milliseconds: 300), () => _loadCandidates());
+  }
+
+  @override
   void dispose() {
+    _targetQuery.removeListener(_onTargetQueryChanged);
+    _candidatesDebounce?.cancel();
     // 离开页面时停止未结束的识别会话。
     _speech.stop();
     _inputController.dispose();
@@ -68,25 +101,79 @@ class _QuickAddPageState extends State<QuickAddPage> {
   Future<void> _parse() async {
     final text = _inputController.text.trim();
     if (text.isEmpty) return;
+    _parseCancelled = false;
     setState(() {
       _phase = _Phase.parsing;
       _error = null;
     });
     try {
       final intent = await ai.parseQuickAdd(text: text);
-      if (!mounted) return;
+      if (!mounted || _parseCancelled) return;
       _fillFrom(intent);
       setState(() {
         _kind = intent.intent;
         _phase = _Phase.preview;
       });
+      if (_kind == IntentKind.modifyItem) {
+        _loadCandidates();
+      }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || _parseCancelled) return;
       setState(() {
         _phase = _Phase.input;
         _error = e;
       });
     }
+  }
+
+  /// 解析期间取消：回到输入态；pending 的解析结果到达后被丢弃。
+  void _cancelParsing() {
+    _parseCancelled = true;
+    setState(() {
+      _phase = _Phase.input;
+      _error = null;
+    });
+  }
+
+  /// 按 `target_query` 检索修改意图的候选目标物品（纯关键词，不依赖 AI）。
+  Future<void> _loadCandidates() async {
+    final query = _targetQuery.text.trim();
+    if (query.isEmpty) {
+      setState(() {
+        _candidates = const [];
+        _selectedCandidateId = null;
+        _candidatesLoading = false;
+        _candidatesError = null;
+      });
+      return;
+    }
+    setState(() {
+      _candidatesLoading = true;
+      _candidatesError = null;
+    });
+    try {
+      final results = await search_api.searchItems(query: query);
+      if (!mounted || query != _targetQuery.text.trim()) return;
+      setState(() {
+        _candidates = results;
+        _candidatesLoading = false;
+        // 默认选中：与目标描述精确同名的候选优先，否则取第一个。
+        _selectedCandidateId = _pickDefaultCandidate(results, query);
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _candidatesLoading = false;
+        _candidatesError = e;
+      });
+    }
+  }
+
+  int? _pickDefaultCandidate(List<SearchResult> results, String query) {
+    for (final r in results) {
+      if (r.name == query) return r.id.toInt();
+    }
+    return results.isEmpty ? null : results.first.id.toInt();
   }
 
   void _fillFrom(ParsedIntent intent) {
@@ -103,7 +190,7 @@ class _QuickAddPageState extends State<QuickAddPage> {
     _newQuantity.text = intent.newQuantity == null ? '' : '${intent.newQuantity}';
   }
 
-  ParsedIntent _buildIntent() {
+  ParsedIntent _buildIntent({String? targetQueryOverride}) {
     int? parseQuantity(String raw) {
       final v = raw.trim();
       return v.isEmpty ? null : int.tryParse(v);
@@ -118,8 +205,8 @@ class _QuickAddPageState extends State<QuickAddPage> {
           ? null
           : _itemDescription.text.trim(),
       quantity: parseQuantity(_quantity.text),
-      targetQuery:
-          _targetQuery.text.trim().isEmpty ? null : _targetQuery.text.trim(),
+      targetQuery: targetQueryOverride ??
+          (_targetQuery.text.trim().isEmpty ? null : _targetQuery.text.trim()),
       newUnitName:
           _newUnitName.text.trim().isEmpty ? null : _newUnitName.text.trim(),
       newBoxName:
@@ -138,7 +225,16 @@ class _QuickAddPageState extends State<QuickAddPage> {
       _phase = _Phase.applying;
       _error = null;
     });
-    final intent = _buildIntent();
+    // 用户在候选列表中选定了目标物品：用其确切名称精确定位，
+    // 避免同名/相似物品被关键词排序误改。
+    final pickedName = (_kind == IntentKind.modifyItem &&
+            _selectedCandidateId != null)
+        ? _candidates
+            .where((c) => c.id.toInt() == _selectedCandidateId)
+            .firstOrNull
+            ?.name
+        : null;
+    final intent = _buildIntent(targetQueryOverride: pickedName);
     try {
       if (_kind == IntentKind.createItem) {
         final result = await ai.applyQuickAdd(intent: intent);
@@ -154,9 +250,8 @@ class _QuickAddPageState extends State<QuickAddPage> {
       }
       if (!mounted) return;
       setState(() => _phase = _Phase.done);
-      // 写库成功后异步补齐向量，失败静默忽略（下次启动/手动补齐兜底）。
-      // ignore: unawaited_futures
-      ai.backfillPendingEmbeddings().catchError((_) => 0);
+      // 写库后向量回填做防抖合并，避免每次写入立即发起网络调用。
+      scheduleBackfill();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -234,6 +329,29 @@ class _QuickAddPageState extends State<QuickAddPage> {
     );
   }
 
+  /// 错误是否为 AI 相关（未配置 / 不可达 / 模型输出异常）：
+  /// 是则错误卡附「前往 AI 设置」引导。
+  bool _isAiError(Object error) {
+    if (error is! FinditError) return false;
+    return error.when(
+      dbNotInitialized: () => false,
+      db: (_) => false,
+      duplicateName: (_, _) => false,
+      notFound: (_, _) => false,
+      validation: (_) => false,
+      io: (_) => false,
+      aiNotConfigured: (_) => true,
+      aiUnreachable: (_) => true,
+      aiModelOutput: (_) => true,
+    );
+  }
+
+  void _openAiSettings() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AiSettingsPage()),
+    );
+  }
+
   void _restart() {
     for (final c in [
       _inputController,
@@ -255,6 +373,10 @@ class _QuickAddPageState extends State<QuickAddPage> {
       _phase = _Phase.input;
       _error = null;
       _summary = '';
+      _candidates = const [];
+      _selectedCandidateId = null;
+      _candidatesError = null;
+      _candidatesLoading = false;
     });
   }
 
@@ -323,9 +445,20 @@ class _QuickAddPageState extends State<QuickAddPage> {
                   : const Icon(Icons.auto_awesome),
               label: Text(_phase == _Phase.parsing ? '解析中…' : '解析'),
             ),
+            if (_phase == _Phase.parsing) ...[
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: _cancelParsing,
+                child: const Text('取消（放弃本次解析）'),
+              ),
+            ],
             if (_error != null) ...[
               const SizedBox(height: 12),
-              _ErrorCard(error: _error!, onRetry: _parse),
+              _ErrorCard(
+                error: _error!,
+                onRetry: _parse,
+                onSettings: _isAiError(_error!) ? _openAiSettings : null,
+              ),
             ],
           ],
         );
@@ -338,6 +471,18 @@ class _QuickAddPageState extends State<QuickAddPage> {
               kind: _kind,
               busy: _phase == _Phase.applying,
               onKindChanged: (k) => setState(() => _kind = k),
+              modifyHeader: _kind == IntentKind.modifyItem
+                  ? _CandidateSelector(
+                      candidates: _candidates,
+                      selectedId: _selectedCandidateId,
+                      loading: _candidatesLoading,
+                      error: _candidatesError,
+                      busy: _phase == _Phase.applying,
+                      onSelect: (id) =>
+                          setState(() => _selectedCandidateId = id),
+                      onRefresh: _loadCandidates,
+                    )
+                  : null,
               createFields: [
                 _field(_unitName, '存储单元（可空）', '如：车库、阳台'),
                 _field(_boxName, '收纳箱 *', '如：蓝色箱子'),
@@ -358,7 +503,11 @@ class _QuickAddPageState extends State<QuickAddPage> {
             ),
             const SizedBox(height: 12),
             if (_error != null) ...[
-              _ErrorCard(error: _error!, onRetry: _confirm),
+              _ErrorCard(
+                error: _error!,
+                onRetry: _confirm,
+                onSettings: _isAiError(_error!) ? _openAiSettings : null,
+              ),
               const SizedBox(height: 12),
             ],
             FilledButton.icon(
@@ -435,7 +584,8 @@ class _QuickAddPageState extends State<QuickAddPage> {
   }
 }
 
-/// 解析预览卡片：意图类型可切换，全部字段可编辑修正。
+/// 解析预览卡片：意图类型可切换，全部字段可编辑修正；
+/// 修改意图时顶部展示「目标物品候选」选择区。
 class _PreviewCard extends StatelessWidget {
   const _PreviewCard({
     required this.kind,
@@ -443,6 +593,7 @@ class _PreviewCard extends StatelessWidget {
     required this.onKindChanged,
     required this.createFields,
     required this.modifyFields,
+    this.modifyHeader,
   });
 
   final IntentKind kind;
@@ -450,6 +601,9 @@ class _PreviewCard extends StatelessWidget {
   final ValueChanged<IntentKind> onKindChanged;
   final List<Widget> createFields;
   final List<Widget> modifyFields;
+
+  /// 修改意图的目标候选区（名称/所在箱/命中数 + 多候选切换）。
+  final Widget? modifyHeader;
 
   @override
   Widget build(BuildContext context) {
@@ -491,8 +645,13 @@ class _PreviewCard extends StatelessWidget {
             const SizedBox(height: 14),
             if (kind == IntentKind.createItem)
               ...createFields
-            else
+            else ...[
+              if (modifyHeader != null) ...[
+                modifyHeader!,
+                const SizedBox(height: 14),
+              ],
               ...modifyFields,
+            ],
           ],
         ),
       ),
@@ -500,12 +659,175 @@ class _PreviewCard extends StatelessWidget {
   }
 }
 
-/// 错误提示卡片（含重试按钮）。
+/// 修改意图的目标物品候选区：展示命中数、候选（名称/所在位置/数量），
+/// 支持切换选择；存在同名物品时提示「将修改最早登记的一件」。
+class _CandidateSelector extends StatelessWidget {
+  const _CandidateSelector({
+    required this.candidates,
+    required this.selectedId,
+    required this.loading,
+    required this.error,
+    required this.busy,
+    required this.onSelect,
+    required this.onRefresh,
+  });
+
+  final List<SearchResult> candidates;
+  final int? selectedId;
+  final bool loading;
+  final Object? error;
+  final bool busy;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onRefresh;
+
+  /// 是否存在同名物品（需提示「按最早登记修改」）。
+  bool get _hasDuplicateNames {
+    final names = <String, int>{};
+    for (final c in candidates) {
+      names[c.name] = (names[c.name] ?? 0) + 1;
+    }
+    return names.values.any((n) => n > 1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.palette;
+    Widget? body;
+    if (loading) {
+      body = const Row(
+        children: [
+          SizedBox(
+            width: 16,
+            height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: 10),
+          Text('正在定位目标物品…', style: TextStyle(fontSize: 13)),
+        ],
+      );
+    } else if (error != null) {
+      body = Row(
+        children: [
+          Expanded(
+            child: Text(
+              '候选加载失败：${friendlyErrorMessage(error!)}',
+              style: TextStyle(fontSize: 12, color: palette.danger),
+            ),
+          ),
+          TextButton(onPressed: onRefresh, child: const Text('重试')),
+        ],
+      );
+    } else if (candidates.isEmpty) {
+      body = Text(
+        '未找到匹配「目标物品」的已有物品，请调整描述后再保存。',
+        style: TextStyle(fontSize: 12, color: palette.inkSoft),
+      );
+    } else {
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '目标物品（命中 ${candidates.length} 个，选择后按其确切名称修改）',
+            style: Theme.of(context).textTheme.labelSmall!.copyWith(
+                  color: palette.pineDeep,
+                  letterSpacing: 0.4,
+                ),
+          ),
+          if (_hasDuplicateNames) ...[
+            const SizedBox(height: 4),
+            Text(
+              '⚠️ 存在同名物品，将修改最早登记的一件。',
+              style: TextStyle(fontSize: 12, color: palette.persimmon),
+            ),
+          ],
+          const SizedBox(height: 8),
+          for (final c in candidates)
+            _candidateTile(context, c),
+        ],
+      );
+    }
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: palette.cardFace,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: palette.cardLine),
+      ),
+      child: body,
+    );
+  }
+
+  Widget _candidateTile(BuildContext context, SearchResult c) {
+    final palette = context.palette;
+    final selected = selectedId == c.id.toInt();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: busy ? null : () => onSelect(c.id.toInt()),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected
+                ? palette.pine.withValues(alpha: 0.12)
+                : palette.paper.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? palette.pine : palette.cardLine,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                selected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 18,
+                color: selected ? palette.pine : palette.inkSoft,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      c.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${c.unitName} · ${c.boxName}'
+                      '${c.quantity > 1 ? ' ×${c.quantity}' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: palette.inkSoft,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 错误提示卡片（重试按钮 + 可选「前往 AI 设置」引导）。
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.error, required this.onRetry});
+  const _ErrorCard({required this.error, required this.onRetry, this.onSettings});
 
   final Object error;
   final VoidCallback onRetry;
+
+  /// AI 相关错误时的设置引导（未配置/不可达/模型输出异常）。
+  final VoidCallback? onSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -517,20 +839,34 @@ class _ErrorCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: palette.danger.withValues(alpha: 0.4)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.error_outline, color: palette.danger),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              friendlyErrorMessage(error),
-              style: const TextStyle(fontSize: 13),
+          Row(
+            children: [
+              Icon(Icons.error_outline, color: palette.danger),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  friendlyErrorMessage(error),
+                  style: const TextStyle(fontSize: 13),
+                ),
+              ),
+              TextButton(
+                onPressed: onRetry,
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+          if (onSettings != null)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: onSettings,
+                icon: const Icon(Icons.settings_outlined, size: 16),
+                label: const Text('前往 AI 设置'),
+              ),
             ),
-          ),
-          TextButton(
-            onPressed: onRetry,
-            child: const Text('重试'),
-          ),
         ],
       ),
     );

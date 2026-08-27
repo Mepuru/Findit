@@ -18,6 +18,29 @@ String? parseFinditBoxSlug(String raw) {
   return slug.isEmpty ? null : slug;
 }
 
+/// App 内深链路由：解析 `findit://box/{slug}` 并跳转到对应收纳箱的物品页。
+///
+/// 供两类入口复用：
+/// 1. 扫码页命中箱标签后跳转；
+/// 2. 外部深链唤起（`findit://box/…`，平台侧注册由原生层完成）时，
+///    由 `main.dart` 在启动/恢复路径调用本函数完成 App 内路由。
+/// 返回是否成功跳转（`false` 表示内容不是 Findit 箱标签或箱子不存在）。
+Future<bool> openBoxByDeepLink(BuildContext context, String raw) async {
+  final slug = parseFinditBoxSlug(raw);
+  if (slug == null) return false;
+  try {
+    final box = await boxes_api.getBoxBySlug(slug: slug);
+    if (!context.mounted) return false;
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ItemsPage(boxId: box.id.toInt())),
+    );
+    return true;
+  } catch (e) {
+    if (context.mounted) showErrorSnack(context, e);
+    return false;
+  }
+}
+
 /// 扫码页无论亮/暗主题都保持深绿相机底色（沉浸式取景），固定不随主题变。
 const Color _scanBackdrop = Color(0xFF24473D);
 
@@ -58,14 +81,9 @@ class _ScanPageState extends State<ScanPage> {
     try {
       await _controller.stop();
     } catch (_) {}
+    if (!mounted) return;
     try {
-      final box = await boxes_api.getBoxBySlug(slug: slug);
-      if (!mounted) return;
-      await Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ItemsPage(boxId: box.id.toInt())),
-      );
-    } catch (e) {
-      if (mounted) showErrorSnack(context, e);
+      await openBoxByDeepLink(context, raw);
     } finally {
       _handling = false;
       if (mounted) {
