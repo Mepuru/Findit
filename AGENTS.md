@@ -77,4 +77,4 @@ chore: 添加 .gitignore 配置文件
 
 - **项目名称**: Findit
 - **许可证**: MIT License
-- **版权所有者**: 栗かな (Copyright © 2026)
+- **版权所有者**: KuriKana (Copyright © 2026)

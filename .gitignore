@@ -84,3 +84,6 @@ ios/Flutter/flutter_assets/
 
 # Rust (flutter_rust_bridge)
 rust/target/
+
+# AgentTeams 运行时状态（不纳入版本控制）
+.agent-teams/
