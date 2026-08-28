@@ -65,21 +65,32 @@ pub fn pending_item_texts(conn: &Connection, limit: usize) -> FinditResult<Vec<(
 
 /// 批量写入物品向量（BLOB）。返回写入条数。
 ///
-/// 写入后使语义搜索内存索引缓存失效（P-H3：缓存版本 bump）。
+/// 整批 UPDATE 包在单个事务内提交（P-L1：避免逐条 autocommit 写放大），
+/// 复用 prepared statement；若调用方已在外层事务中（如 AI 应用层编排），
+/// 则参与外层事务，避免嵌套事务错误。写入后使语义搜索内存索引缓存失效
+/// （P-H3：缓存版本 bump）。
 pub fn write_item_embeddings(conn: &Connection, pairs: &[(i64, Vec<f32>)]) -> FinditResult<usize> {
-    let mut count = 0usize;
-    for (item_id, vec) in pairs {
-        let blob = embedding_to_blob(vec);
-        conn.execute(
-            "UPDATE items SET embedding = ?2 WHERE id = ?1",
-            params![item_id, blob],
-        )?;
-        count += 1;
+    if pairs.is_empty() {
+        return Ok(0);
     }
-    if count > 0 {
-        mark_embeddings_dirty();
+    let run = |conn: &Connection| -> FinditResult<()> {
+        let mut stmt = conn.prepare("UPDATE items SET embedding = ?2 WHERE id = ?1")?;
+        for (item_id, vec) in pairs {
+            let blob = embedding_to_blob(vec);
+            stmt.execute(params![item_id, blob])?;
+        }
+        Ok(())
+    };
+    if conn.is_autocommit() {
+        let tx = conn.unchecked_transaction()?;
+        run(&tx)?;
+        tx.commit()?;
+    } else {
+        // 调用方已有外层事务：直接执行，原子性由外层事务保证。
+        run(conn)?;
     }
-    Ok(count)
+    mark_embeddings_dirty();
+    Ok(pairs.len())
 }
 
 /// 清空全部物品向量（模型/维度变更时先清空再重建）。返回受影响行数。
@@ -302,6 +313,37 @@ mod tests {
 
         assert_eq!(count_pending_embeddings(&conn).unwrap(), 3);
         assert_eq!(count_items(&conn).unwrap(), 5);
+    }
+
+    #[test]
+    fn pending_scan_uses_partial_index_when_present() {
+        // P-L2：部分索引 `items(id) WHERE embedding IS NULL` 存在时，
+        // 待回填扫描（embedding IS NULL ORDER BY id）应命中该索引，
+        // 全量回填由近似 O(N²) 行访问降为 O(N)。
+        let conn = setup();
+        let ids = fixture_items(&conn, 3);
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_items_pending_embedding \
+             ON items(id) WHERE embedding IS NULL;",
+        )
+        .unwrap();
+
+        let plan: String = conn
+            .query_row(
+                "EXPLAIN QUERY PLAN \
+                 SELECT id FROM items WHERE embedding IS NULL ORDER BY id LIMIT 5",
+                [],
+                |r| r.get(3), // EXPLAIN QUERY PLAN 的第 4 列为 detail（计划文本）
+            )
+            .unwrap();
+        assert!(
+            plan.contains("idx_items_pending_embedding"),
+            "待回填扫描应命中部分索引，实际计划：{plan}"
+        );
+
+        // 已有向量的物品不再被扫描（部分索引语义正确）。
+        write_item_embeddings(&conn, &[(ids[0], vec![1.0])]).unwrap();
+        assert_eq!(pending_item_texts(&conn, 10).unwrap().len(), 2);
     }
 
     #[test]

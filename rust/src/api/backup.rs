@@ -17,9 +17,9 @@ use crate::frb_generated::StreamSink;
 /// 导出备份到 `target_path`（zip）。进度阶段：`snapshot` / `photos` /
 /// `finalize`，最后一条 `done` 事件携带 [`BackupSummary`]。
 ///
-/// 锁边界：`with_conn` 内只做 `wal_checkpoint` + `VACUUM INTO` 快照 +
-/// 三表计数（+ 快照库内剔除 API Key），随即释放锁；照片打包与
-/// manifest 写入在无锁环境进行（快照文件已是一致性副本）。
+/// 锁边界（P-L4）：快照（`wal_checkpoint` + `VACUUM INTO` + 三表计数 +
+/// 快照库内剔除 API Key）在**独立连接**上执行，全程不持有全局数据库锁；
+/// 照片打包与 manifest 写入在无锁环境进行（快照文件已是一致性副本）。
 pub fn export_backup(
     target_path: String,
     sink: StreamSink<BackupProgress>,
@@ -39,9 +39,10 @@ pub fn export_backup(
         });
     };
 
-    // 第一段（锁内）：快照 + 计数，随即释放锁。
+    // 第一段（无全局锁）：独立连接生成快照 + 计数。
     progress("snapshot", 0, 1);
-    let snapshot = with_conn(crate::core::backup::export::create_snapshot)?;
+    let db_path = dir.join(crate::core::db::DB_FILE_NAME);
+    let snapshot = crate::core::backup::export::create_snapshot(&db_path)?;
     progress("snapshot", 1, 1);
 
     // 第二段（锁外）：照片打包与 manifest 写入（可能耗时很长）。

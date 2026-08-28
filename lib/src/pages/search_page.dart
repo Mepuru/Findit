@@ -209,28 +209,49 @@ class _SearchPageState extends State<SearchPage> {
         final keyword = _results
             .where((r) => r.matchedBy == MatchedBy.keyword)
             .toList();
-        return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
-          children: [
+        // P-L5：分段懒构建。一次构建全部卡片的首帧/滚动开销随结果数
+        // 线性增长，改用 SliverList 只构建视口附近的结果。
+        return CustomScrollView(
+          slivers: [
             if (semantic.isNotEmpty) ...[
-              _SectionHeader(label: '语义匹配', count: semantic.length),
-              const SizedBox(height: 8),
-              for (final r in semantic) ...[
-                _ResultCard(result: r, onTap: () => _openResult(r)),
-                const SizedBox(height: 10),
-              ],
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _SectionHeader(label: '语义匹配', count: semantic.length),
+                ),
+              ),
+              _resultSliver(semantic),
             ],
             if (keyword.isNotEmpty) ...[
-              _SectionHeader(label: '关键词匹配', count: keyword.length),
-              const SizedBox(height: 8),
-              for (final r in keyword) ...[
-                _ResultCard(result: r, onTap: () => _openResult(r)),
-                const SizedBox(height: 10),
-              ],
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                sliver: SliverToBoxAdapter(
+                  child: _SectionHeader(label: '关键词匹配', count: keyword.length),
+                ),
+              ),
+              _resultSliver(keyword),
             ],
+            const SliverToBoxAdapter(child: SizedBox(height: 48)),
           ],
         );
     }
+  }
+
+  /// 单个结果分段的懒构建 Sliver（卡片间距 10 由每项底部内边距承担）。
+  Widget _resultSliver(List<SearchResult> results) {
+    return SliverPadding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      sliver: SliverList.builder(
+        itemCount: results.length,
+        itemBuilder: (context, index) {
+          final r = results[index];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: _ResultCard(result: r, onTap: () => _openResult(r)),
+          );
+        },
+      ),
+    );
   }
 }
 

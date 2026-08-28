@@ -52,6 +52,13 @@ class PhotoViewerPage extends StatelessWidget {
           child: Image.file(
             File(photoPath),
             fit: BoxFit.contain,
+            // P-L6：按屏幕物理像素宽度限制解码尺寸。主图 1600px 全尺寸
+            // 解码在低端机内存/解码开销偏高；cacheWidth 取屏幕宽度 × DPR
+            // 即可满足清晰度（约 1080–1440，超过原图宽度时按原图解码）。
+            cacheWidth:
+                (MediaQuery.sizeOf(context).width *
+                        MediaQuery.devicePixelRatioOf(context))
+                    .round(),
             errorBuilder: (context, error, stackTrace) => Column(
               mainAxisSize: MainAxisSize.min,
               children: [

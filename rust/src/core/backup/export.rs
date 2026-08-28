@@ -5,8 +5,8 @@
 //! 全程流式：固定 64KB 缓冲，内存占用恒定。
 //!
 //! 锁边界：[`create_snapshot`]（checkpoint + 计数 + VACUUM INTO + 剔除密钥）
-//! 是需要数据库连接的全部工作；照片打包与 manifest 写入由
-//! [`package_backup`] 在无锁环境完成（快照文件已是一致性副本）。
+//! 在**独立连接**上完成（P-L4：不持有全局数据库锁）；照片打包与 manifest
+//! 写入由 [`package_backup`] 在无锁环境完成（快照文件已是一致性副本）。
 
 use std::fs::File;
 use std::io::{Read, Write};
@@ -47,13 +47,27 @@ pub struct Snapshot {
     pub units_count: i64,
 }
 
-/// 生成一致性快照（需要数据库连接，应在持锁范围内完成）：
+/// 生成一致性快照（独立连接执行，P-L4：不再持有全局数据库锁）：
 ///
-/// 1. `wal_checkpoint(TRUNCATE)` 把 WAL 数据落盘，避免快照遗漏最近写入；
+/// 1. 对 `db_path` 另开连接，`wal_checkpoint(TRUNCATE)` 把 WAL 数据落盘，
+///    避免快照遗漏最近写入；
 /// 2. 统计三表计数（写入 manifest）；
 /// 3. `VACUUM INTO` 生成一致性副本（不阻塞在线读写）；
 /// 4. 在快照副本上剔除全部密钥类设置（密钥不随备份分发）。
-pub fn create_snapshot(conn: &Connection) -> FinditResult<Snapshot> {
+///
+/// 生产路径（`api::backup::export_backup`）调用本函数：快照全程在独立
+/// 连接上完成，大库快照不再阻塞其它数据库操作。
+pub fn create_snapshot(db_path: &Path) -> FinditResult<Snapshot> {
+    let conn = Connection::open(db_path)
+        .map_err(|e| FinditError::Io(format!("无法打开数据库快照连接：{e}")))?;
+    // 快照连接与在线连接并行：等待在线写锁释放，避免 checkpoint 直接失败。
+    conn.pragma_update(None, "busy_timeout", 5000)?;
+    create_snapshot_on(&conn)
+}
+
+/// 在既有连接上生成一致性快照（供测试与一步导出的 [`export_backup`] 使用；
+/// 该路径通常持有测试专用连接，生产导出请走 [`create_snapshot`]）。
+pub fn create_snapshot_on(conn: &Connection) -> FinditResult<Snapshot> {
     conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
     let (items_count, boxes_count, units_count) = count_rows(conn)?;
 
@@ -145,8 +159,9 @@ pub fn package_backup(
 
 /// 导出备份到 `target_path`（zip）：[`create_snapshot`] + [`package_backup`]。
 ///
-/// 仅供需要一步到位的场景（如测试）；API 层应分两步调用，
-/// 以便在两段之间释放全局数据库锁。
+/// 仅供需要一步到位的场景（如测试，连接由调用方持有）；API 层应分两步
+/// 调用 [`create_snapshot`]（独立连接）→ [`package_backup`]，以便快照
+/// 不占用全局数据库锁（P-L4）。
 pub fn export_backup(
     conn: &Connection,
     db_dir: &Path,
@@ -156,7 +171,7 @@ pub fn export_backup(
     if let Some(f) = on_progress {
         f("snapshot", 0, 1);
     }
-    let snapshot = create_snapshot(conn)?;
+    let snapshot = create_snapshot_on(conn)?;
     if let Some(f) = on_progress {
         f("snapshot", 1, 1);
     }

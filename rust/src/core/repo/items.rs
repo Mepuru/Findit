@@ -98,6 +98,8 @@ fn replace_item_categories(conn: &Connection, item_id: i64, category_ids: &[i64]
 }
 
 /// 创建物品。`category_ids` 为分类 id 列表（可空）。
+///
+/// INSERT + 分类关联在单事务内提交（P-L3：避免孤儿 `item_categories` 行）。
 pub fn create_item(
     conn: &Connection,
     box_id: i64,
@@ -114,14 +116,28 @@ pub fn create_item(
     require_box(conn, box_id)?;
     let category_ids = validate_category_ids(conn, category_ids)?;
 
-    let now = now_iso8601();
-    conn.execute(
-        "INSERT INTO items (name, description, quantity, box_id, created_at, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        params![name, description, quantity, box_id, now, now],
-    )?;
-    let id = conn.last_insert_rowid();
-    replace_item_categories(conn, id, &category_ids)?;
+    // P-L3：INSERT + 分类关联在单事务内提交（进程中断不会残留孤儿
+    // `item_categories` 行，也避免逐语句 autocommit）。若调用方已在外层
+    // 事务中（如 AI 应用层 apply 编排），则参与外层事务。
+    let insert = |conn: &Connection| -> FinditResult<i64> {
+        let now = now_iso8601();
+        conn.execute(
+            "INSERT INTO items (name, description, quantity, box_id, created_at, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![name, description, quantity, box_id, now, now],
+        )?;
+        let id = conn.last_insert_rowid();
+        replace_item_categories(conn, id, &category_ids)?;
+        Ok(id)
+    };
+    let id = if conn.is_autocommit() {
+        let tx = conn.unchecked_transaction()?;
+        let id = insert(&tx)?;
+        tx.commit()?;
+        id
+    } else {
+        insert(conn)?
+    };
 
     get_item(conn, id)
 }
@@ -172,6 +188,10 @@ pub fn get_item(conn: &Connection, id: i64) -> FinditResult<Item> {
 }
 
 /// 更新物品；`None` 字段表示不更新；`category_ids` 为 `Some` 时整体替换。
+///
+/// UPDATE 与分类替换包在单事务内（P-L3）；不再在开头冗余读取一次物品
+/// ——末尾的 [`get_item`] 既返回最新结果，也天然承担「不存在 → NotFound」。
+/// 注意：字段校验（名称/数量/箱存在性/分类存在性）在事务外完成。
 #[allow(clippy::too_many_arguments)]
 pub fn update_item(
     conn: &Connection,
@@ -182,8 +202,6 @@ pub fn update_item(
     box_id: Option<i64>,
     category_ids: Option<Vec<i64>>,
 ) -> FinditResult<Item> {
-    get_item(conn, id)?;
-
     let mut sets: Vec<String> = Vec::new();
     let mut values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
 
@@ -208,19 +226,34 @@ pub fn update_item(
         sets.push("box_id = ?".to_string());
         values.push(Box::new(box_id));
     }
+    let category_ids = match category_ids {
+        Some(ids) => Some(validate_category_ids(conn, &ids)?),
+        None => None,
+    };
 
-    if !sets.is_empty() {
-        sets.push("updated_at = ?".to_string());
-        values.push(Box::new(now_iso8601()));
-        values.push(Box::new(id));
-        let sql = format!("UPDATE items SET {} WHERE id = ?", sets.join(", "));
-        let params: Vec<&dyn rusqlite::types::ToSql> = values.iter().map(|v| v.as_ref()).collect();
-        conn.execute(&sql, params.as_slice())?;
-    }
-
-    if let Some(category_ids) = category_ids {
-        let category_ids = validate_category_ids(conn, &category_ids)?;
-        replace_item_categories(conn, id, &category_ids)?;
+    // P-L3：UPDATE 与分类替换包在单事务内；若调用方已在外层事务中
+    // （如 AI 应用层 apply 编排），则参与外层事务。
+    let apply = |conn: &Connection| -> FinditResult<()> {
+        if !sets.is_empty() {
+            sets.push("updated_at = ?".to_string());
+            values.push(Box::new(now_iso8601()));
+            values.push(Box::new(id));
+            let sql = format!("UPDATE items SET {} WHERE id = ?", sets.join(", "));
+            let params: Vec<&dyn rusqlite::types::ToSql> =
+                values.iter().map(|v| v.as_ref()).collect();
+            conn.execute(&sql, params.as_slice())?;
+        }
+        if let Some(category_ids) = category_ids {
+            replace_item_categories(conn, id, &category_ids)?;
+        }
+        Ok(())
+    };
+    if conn.is_autocommit() {
+        let tx = conn.unchecked_transaction()?;
+        apply(&tx)?;
+        tx.commit()?;
+    } else {
+        apply(conn)?;
     }
 
     get_item(conn, id)

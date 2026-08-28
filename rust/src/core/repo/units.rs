@@ -154,21 +154,19 @@ pub fn delete_unit(conn: &Connection, id: i64) -> FinditResult<()> {
         .query_map(params![id], |row| row.get(0))?
         .collect::<Result<Vec<_>, _>>()?;
 
-    // 该单元下的全部箱子（先删子表，避免外键约束下删父表失败）
-    let box_ids: Vec<i64> = tx
-        .prepare("SELECT id FROM storage_boxes WHERE unit_id = ?1")?
-        .query_map(params![id], |row| row.get(0))?
-        .collect::<Result<Vec<_>, _>>()?;
-
-    for box_id in &box_ids {
-        // 箱内物品的分类关联
-        tx.execute(
-            "DELETE FROM item_categories WHERE item_id IN \
-             (SELECT id FROM items WHERE box_id = ?1)",
-            params![box_id],
-        )?;
-        tx.execute("DELETE FROM items WHERE box_id = ?1", params![box_id])?;
-    }
+    // 级联删除（先删子表，避免外键约束下删父表失败）。
+    // P-L8：原实现按箱逐箱循环 DELETE，语句数随箱数线性增长；现合并为
+    // 单条 `DELETE ... IN (SELECT ...)` 子查询，一次完成整棵子树。
+    tx.execute(
+        "DELETE FROM item_categories WHERE item_id IN \
+         (SELECT id FROM items WHERE box_id IN (SELECT id FROM storage_boxes WHERE unit_id = ?1))",
+        params![id],
+    )?;
+    tx.execute(
+        "DELETE FROM items WHERE box_id IN \
+         (SELECT id FROM storage_boxes WHERE unit_id = ?1)",
+        params![id],
+    )?;
     tx.execute("DELETE FROM storage_boxes WHERE unit_id = ?1", params![id])?;
     tx.execute("DELETE FROM storage_units WHERE id = ?1", params![id])?;
 
