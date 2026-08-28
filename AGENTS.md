@@ -73,6 +73,14 @@ chore: 添加 .gitignore 配置文件
 - 远程仓库地址：https://github.com/Mepuru/Findit.git
 - 定期同步远程分支，保持代码最新
 
+## 开发与验证规范
+
+### 静态分析命令执行权限
+
+- `dart analyze` / `flutter analyze` 等静态分析命令**只能由队长主 Agent 运行**，子 Agent（AgentTeams 成员）不得执行
+- 原因：子 Agent 会话运行分析命令会因长耗时/环境限制导致会话挂起或中断（实际多次出现）；需要静态分析时，子 Agent 应向队长报告，由队长统一执行并反馈结果
+- 队长执行分析命令时应使用后台运行方式（`run_in_background`），避免前台阻塞会话
+
 ## 项目信息
 
 - **项目名称**: Findit
