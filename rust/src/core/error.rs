@@ -11,6 +11,10 @@
 use thiserror::Error;
 
 /// Findit 业务错误。
+///
+/// 注意（S-L4）：`Db` / `Io` / `AiModelOutput` 的 Display 只输出通用提示，
+/// 不把 SQLite 细节、文件路径或 AI 服务端响应片段原样回显给用户；
+/// 完整细节保留在字段中，供调试日志（`{:?}`）使用。
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum FinditError {
     /// 数据库尚未通过 `init_db` 初始化。
@@ -18,7 +22,8 @@ pub enum FinditError {
     DbNotInitialized,
 
     /// 底层 SQLite / rusqlite 错误。
-    #[error("数据库错误：{0}")]
+    /// 字段保留完整 SQLite 信息（调试用），Display 对外脱敏（S-L4）。
+    #[error("数据库操作失败，请重试")]
     Db(String),
 
     /// 唯一约束冲突（重名）。
@@ -35,7 +40,8 @@ pub enum FinditError {
     Validation(String),
 
     /// 文件 / 目录 IO 错误。
-    #[error("IO 错误：{0}")]
+    /// 字段保留完整路径/IO 信息（调试用），Display 对外脱敏（S-L4）。
+    #[error("文件读写失败，请检查存储空间或文件权限")]
     Io(String),
 
     /// AI 服务尚未配置（如未填写服务地址）。
@@ -47,7 +53,8 @@ pub enum FinditError {
     AiUnreachable(String),
 
     /// 服务可达但返回内容异常：HTTP 错误状态、模型输出无法解析等。
-    #[error("AI 模型输出异常：{0}")]
+    /// 字段保留服务端响应片段（调试用），Display 对外脱敏（S-L4）。
+    #[error("AI 模型输出异常，请检查模型配置后重试")]
     AiModelOutput(String),
 }
 

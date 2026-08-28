@@ -18,7 +18,8 @@ if (keystoreConfigured) {
 }
 
 android {
-    namespace = "com.example.findit"
+    // F13：namespace 与 applicationId / Kotlin 源码包路径统一为 com.kurikana.findit。
+    namespace = "com.kurikana.findit"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -28,7 +29,7 @@ android {
     }
 
     defaultConfig {
-        // 唯一应用包名（与 namespace 解耦，仅影响新安装）。
+        // 唯一应用包名（与 namespace 一致，见 F13）。
         applicationId = "com.kurikana.findit"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.

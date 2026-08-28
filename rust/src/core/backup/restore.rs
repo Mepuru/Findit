@@ -16,7 +16,7 @@
 
 use std::fs::File;
 use std::io::{BufReader, Read, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use rusqlite::{params, Connection};
@@ -46,13 +46,17 @@ pub struct RestoreLimits {
     pub max_uncompressed_bytes: u64,
     /// 最大压缩比（未压缩/压缩），超过视为炸弹。
     pub max_compression_ratio: u64,
+    /// zip 条目（文件/目录）数上限（S-L2）：防止海量微小条目 DoS。
+    /// 每条目对应一个待解压文件，条目数上限即文件数预算。
+    pub max_entry_count: u64,
 }
 
-/// 生产默认上限：1GB zip / 2GB 解压 / 100 倍压缩比。
+/// 生产默认上限：1GB zip / 2GB 解压 / 100 倍压缩比 / 10 万条目（S-L2）。
 pub const DEFAULT_RESTORE_LIMITS: RestoreLimits = RestoreLimits {
     max_zip_bytes: 1 << 30,
     max_uncompressed_bytes: 2 << 30,
     max_compression_ratio: 100,
+    max_entry_count: 100_000,
 };
 
 /// 恢复统计。
@@ -113,6 +117,14 @@ pub fn restore_backup(
         .map_err(|e| FinditError::Validation(format!("无法打开备份 zip：{e}")))?;
 
     // 4. 第一遍：安全与规模校验。
+    // S-L2：先核对 zip 条目数（文件数预算），再逐条目做路径/字节校验。
+    if (archive.len() as u64) > limits.max_entry_count {
+        return Err(FinditError::Validation(format!(
+            "备份条目数过多（{} 条，上限 {} 条）",
+            archive.len(),
+            limits.max_entry_count
+        )));
+    }
     let mut has_db = false;
     let mut has_photos = false;
     let mut total_uncompressed: u64 = 0;
@@ -180,11 +192,14 @@ pub fn restore_backup(
     if let Some(f) = on_progress {
         f("swap", 0, 1);
     }
-    let swap = swap_dirs(&temp_dir, db_dir);
-    if let Err(e) = swap {
-        let _ = std::fs::remove_dir_all(&temp_dir);
-        return Err(e);
-    }
+    let leftover = swap_dirs(&temp_dir, db_dir);
+    let leftover = match leftover {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&temp_dir);
+            return Err(e);
+        }
+    };
 
     // 防御（S-H3）：恢复的库若残留密钥类设置（如旧版导出的备份未剔除），
     // 立即置空，保证恢复后的库不含任何密钥。导出端已保证剔除，此处失败不阻断。
@@ -192,6 +207,15 @@ pub fn restore_backup(
         if let Err(e) = crate::core::backup::export::scrub_secrets(&restored_conn) {
             eprintln!("[findit] 恢复后清理密钥设置失败：{e}");
         }
+    }
+
+    // S-L1：旧数据副本移入数据目录内的隐藏目录 `.old-data-{ts}`。
+    // 数据目录位于平台云备份排除范围（Android allowBackup=false 排除整个应用数据目录；
+    // iOS AppDelegate 对 Documents 目录设置 NSURLIsExcludedFromBackupKey，而数据目录即
+    // Documents），因此副本不再参与云备份；同时仍保留一份用于恢复后的回滚。
+    // 移动失败不阻断恢复（副本保留在原位，下次恢复时仍会被清理）。
+    if let Err(e) = relocate_leftover_backup(db_dir, &leftover) {
+        eprintln!("[findit] 旧数据副本移入数据目录失败（副本保留在原位）：{e}");
     }
 
     if let Some(f) = on_progress {
@@ -358,7 +382,9 @@ fn validate_extracted_backup(temp_dir: &Path) -> FinditResult<()> {
 
 /// 原子替换：`db_dir` → `{db_dir}.backup-{unix秒}`，`temp_dir` → `db_dir`。
 /// 第二步失败时立即把旧目录改回去（回滚）。
-fn swap_dirs(temp_dir: &Path, db_dir: &Path) -> FinditResult<()> {
+///
+/// 返回旧数据副本目录路径（成功替换后由调用方决定如何处理，见 [`relocate_leftover_backup`]）。
+fn swap_dirs(temp_dir: &Path, db_dir: &Path) -> FinditResult<PathBuf> {
     let parent = db_dir.parent().filter(|p| !p.as_os_str().is_empty());
     let dir_name = db_dir
         .file_name()
@@ -393,7 +419,51 @@ fn swap_dirs(temp_dir: &Path, db_dir: &Path) -> FinditResult<()> {
 
     // 只保留最近一份旧数据副本，清理更早的 .backup-*（尽力而为）。
     cleanup_old_backups(db_dir, &backup_dir);
-    Ok(())
+    Ok(backup_dir)
+}
+
+/// S-L1：把旧数据副本移入数据目录内的隐藏目录（`.old-data-{unix秒}`），
+/// 使其处于平台云备份排除范围之内：
+/// - Android：`allowBackup=false` 排除整个应用数据目录；
+/// - iOS：AppDelegate 对 Documents（即数据目录）设置 `NSURLIsExcludedFromBackupKey`。
+/// 保留最近一份用于恢复后的回滚；更早的 `.old-data-*` 一并清理（尽力而为）。
+fn relocate_leftover_backup(db_dir: &Path, leftover: &Path) -> FinditResult<()> {
+    // 副本内可能嵌套着更早的隐藏副本（前一次恢复移入的目录随整库被改名带走），
+    // 一并清除，避免多层嵌套堆积。
+    cleanup_old_hidden_backups(leftover);
+    // 数据目录内已有的旧 `.old-data-*` 隐藏副本先清理（通常只剩这一份，防御残留）。
+    cleanup_old_hidden_backups(db_dir);
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let mut dest = db_dir.join(format!(".old-data-{ts}"));
+    let mut i = 1u32;
+    while dest.exists() {
+        dest = db_dir.join(format!(".old-data-{ts}-{i}"));
+        i += 1;
+    }
+    std::fs::rename(leftover, &dest)
+        .map_err(|e| FinditError::Io(format!("移动旧数据副本失败：{e}")))
+}
+
+/// 清理数据目录内旧的 `.old-data-*` 隐藏副本（保留最近一份是调用方职责，此处全清）。
+fn cleanup_old_hidden_backups(db_dir: &Path) {
+    let entries = match std::fs::read_dir(db_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with(".old-data-") {
+            let _ = std::fs::remove_dir_all(&path);
+        }
+    }
 }
 
 /// 清理旧的 `{dir_name}.backup-*` 目录，仅保留 `keep`。

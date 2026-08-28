@@ -279,7 +279,7 @@ fn export_restore_roundtrip_preserves_everything() {
 }
 
 #[test]
-fn restore_keeps_one_old_backup_copy() {
+fn restore_keeps_one_old_backup_copy_inside_data_dir() {
     let root = temp_root();
     let db_dir = root.join("data");
     let zip_path = root.join("backup.zip");
@@ -289,12 +289,14 @@ fn restore_keeps_one_old_backup_copy() {
     export_backup(&conn, &db_dir, &zip_path, None).unwrap();
     drop(conn);
 
-    // 连续恢复两次：应只保留最近一份旧数据副本。
+    // 连续恢复两次：旧数据副本应收敛为数据目录内的一份隐藏副本（S-L1：
+    // 移入 .old-data-* 使其处于平台云备份排除范围，且不无限堆积）。
     restore_backup(&zip_path, &db_dir, &DEFAULT_RESTORE_LIMITS, None).unwrap();
     restore_backup(&zip_path, &db_dir, &DEFAULT_RESTORE_LIMITS, None).unwrap();
 
+    // 数据目录旁不再有裸奔的 .backup-* 明文副本。
     let parent = db_dir.parent().unwrap();
-    let backups: Vec<_> = fs::read_dir(parent)
+    let sibling_backups: Vec<_> = fs::read_dir(parent)
         .unwrap()
         .flatten()
         .filter(|e| {
@@ -303,7 +305,18 @@ fn restore_keeps_one_old_backup_copy() {
                 .starts_with("data.backup-")
         })
         .collect();
-    assert_eq!(backups.len(), 1, "只应保留一份旧数据副本");
+    assert!(sibling_backups.is_empty(), "旧数据副本不应留在数据目录旁：{sibling_backups:?}");
+
+    // 数据目录内应恰好保留一份隐藏旧副本。
+    let hidden: Vec<_> = fs::read_dir(&db_dir)
+        .unwrap()
+        .flatten()
+        .filter(|e| {
+            e.file_name().to_string_lossy().starts_with(".old-data-")
+                && e.path().is_dir()
+        })
+        .collect();
+    assert_eq!(hidden.len(), 1, "应只保留一份隐藏旧数据副本");
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +407,39 @@ fn restore_rejects_over_uncompressed_limit() {
     };
     let err = restore_backup(&zip_path, &db_dir, &limits, None).unwrap_err();
     assert!(err.to_string().contains("上限"));
+}
+
+#[test]
+fn restore_rejects_too_many_entries() {
+    // S-L2：海量微小条目 DoS 防护 —— 条目数超过上限时直接拒绝。
+    let root = temp_root();
+    let zip_path = root.join("many_entries.zip");
+    // 40 个微小条目（超出测试用上限 30）。
+    let entries: Vec<(String, &[u8])> = (0..40)
+        .map(|i| (format!("files/f{i}.txt"), b"x".as_slice()))
+        .collect();
+    let refs: Vec<(&str, &[u8])> = entries
+        .iter()
+        .map(|(n, b)| (n.as_str(), *b))
+        .collect();
+    write_test_zip(&zip_path, &refs);
+
+    let db_dir = root.join("data");
+    fs::create_dir_all(&db_dir).unwrap();
+    let limits = RestoreLimits {
+        max_entry_count: 30,
+        ..DEFAULT_RESTORE_LIMITS
+    };
+    let err = restore_backup(&zip_path, &db_dir, &limits, None).unwrap_err();
+    assert!(err.to_string().contains("条目数过多"));
+    assert_no_backup_residue(&db_dir);
+    // 正常备份（条目数在内）不受影响。
+    let limits_ok = RestoreLimits {
+        max_entry_count: 1000,
+        ..DEFAULT_RESTORE_LIMITS
+    };
+    let err2 = restore_backup(&zip_path, &db_dir, &limits_ok, None).unwrap_err();
+    assert!(err2.to_string().contains("findit.db"), "超限放行后应走到数据库缺失校验");
 }
 
 #[test]
