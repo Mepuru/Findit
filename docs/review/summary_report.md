@@ -241,9 +241,10 @@ Findit 是一个**工程质量良好、功能链完整**的隐私优先本地应
 
 | 门禁 | 结果 |
 | --- | --- |
-| `cargo test --manifest-path rust/Cargo.toml` | ✅ 196 passed / 0 failed（含 FTS5、hybrid、backup、photo 全部测试） |
-| `dart analyze lib test` | ✅ No issues found（沙箱放开后可用，约 7s） |
-| `flutter build apk --debug` | ✅ 构建成功，产物 `build/app/outputs/flutter-apk/app-debug.apk`（209.9MB，四 ABI） |
+| `cargo test --manifest-path rust/Cargo.toml` | ✅ 199 passed / 0 failed（三线合流后权威门禁，含 FTS5、hybrid、backup、photo、db 拆分与 embed 部分索引等全部测试） |
+| `dart analyze lib test`（首轮） | ✅ No issues found（沙箱放开后可用，约 7s） |
+| `flutter build apk --debug`（首轮） | ✅ 构建成功，产物 `build/app/outputs/flutter-apk/app-debug.apk`（209.9MB，四 ABI） |
+| `dart analyze` + 构建（遗留修复轮） | ⏳ 由队长在三条修复线全部完成后统一执行最终复核（AGENTS.md 规范：成员不运行 dart analyze/flutter analyze） |
 
 ### 6.2 25 项高/中问题修复状态（范围：8 高 + 17 中）
 
@@ -275,25 +276,65 @@ Findit 是一个**工程质量良好、功能链完整**的隐私优先本地应
 | S-M4 | ✅ | 回填开关默认关 + 启动门控（main.dart）；**修复阶段补齐**：设置页与后端键名统一为 `semantic_backfill_enabled`（原 `ai_semantic_backfill_enabled` 不一致导致开关不生效） |
 | S-M5 | ✅ | iOS 相机/麦克风/相册 usage description + ATS 本地网络放行 |
 
-**产品线 7 项 — 5 ✅ + 2 ⚠️ 部分落地**
+**产品线 7 项 — 全部 ✅（遗留修复轮补齐 F1/F4）**
 
 | 编号 | 状态 | 落地说明 |
 | --- | --- | --- |
-| F1 | ⚠️ 部分 | 平台深链注册完成（Android intent-filter `findit://box` + iOS CFBundleURLTypes）；App 内扫码解析可用；**外部扫码唤起后直达收纳箱需引入 app_links/uni_links 插件（未做，留待后续）** |
+| F1 | ✅ | 深链直达闭环完成：平台注册（Android intent-filter `findit://box` + iOS CFBundleURLTypes）+ `app_links ^7.2.1`（pubspec.yaml）+ main.dart 冷启动 `getInitialLink` / 运行中 `uriLinkStream` 路由（去重处理），外部扫码 `findit://box/{slug}` 唤起后直达收纳箱 |
 | F2 | ✅ | AI 修改预览展示候选物品 + 300ms 防抖检索 + 选定后以确切名称精确定位（quick_add_page.dart + apply.rs） |
 | F3 | ✅ | 编辑表单「所在收纳箱」选择器，支持跨单元（items_page.dart） |
-| F4 | ⚠️ 部分 | 分类管理页（重命名/删除）已建（categories_page.dart）；**入口未接入导航，UI 暂不可达** |
+| F4 | ✅ | 分类管理页接入完成：物品页「分类管理」入口（items_page.dart L1076-1080）+ 设置页「数据管理」入口（settings_page.dart L445-455），均直达 CategoriesPage |
 | F5 | ✅ | 搜索直达物品并高亮、结果卡缩略图、语义提示按配置状态动态显示（search_page.dart） |
 | F6 | ✅ | 解析期取消 + 错误卡「前往 AI 设置」引导 + CHAT_TIMEOUT=20s 可配置 |
 | F7 | ✅ | 建档态先选图、保存后立即留档（items_page.dart） |
 
 **修复阶段额外处理**：t7 遗留的 2 个编译错误（quick_add_page `targetQuery` final 赋值 → 改 `_buildIntent(targetQueryOverride:)` 构造；settings_page `pipe(sink)` → `addStream`）+ 5 个 analyze 提示（多余 cast/import、final 字段、mounted 守卫）已由队长修复，`dart analyze` 归零。
 
-### 6.3 已知遗留（本次范围外 / 待后续）
+### 6.3 遗留项处理结果（2026-08 遗留修复轮）
 
-1. **21 项低危与提示问题**（P-L1–L8、S-L1–L4、S-I1–I2、F8–F14）未处理，见 §3 backlog 表；
-2. **F1 外部深链直达**：需引入深链插件并注册路由；
-3. **F4 分类管理入口**：需在导航/物品页接入 CategoriesPage；
-4. **新文件注释乱码**：categories_page.dart、backfill.dart、network_security_config.xml 等部分新增文件注释存在编码损坏（UTF-8 被错误写入），需按 UTF-8 重写清理；
-5. **release 构建**：需先创建 release keystore 并配置 `android/key.properties`（构建会 fail-fast 提示）；release APK 体积约 83.5MB（README）；
-6. **验证建议**：发布前建议在正常环境补跑 `flutter analyze`（本阶段已用 `dart analyze` 全绿 + debug 构建验证）。
+> 本表为三条修复线（性能 P-L1–L8 / 安全 S-L1–L4、S-I1 / 产品 F1、F4、F8–F14、S-I2、乱码）完成后的核验结果；证据为当前工作区源码位置。Rust 侧权威门禁 `cargo test` 199/199 全绿（三线合流后）。
+
+**性能线（P-L1–L8）— 全部 ✅**
+
+| 编号 | 状态 | 落地证据 |
+| --- | --- | --- |
+| P-L1 | ✅ | 向量写回整批 UPDATE 包单事务 + prepared statement 复用，外层事务感知（`rust/src/core/ai/embed.rs` `write_item_embeddings`） |
+| P-L2 | ✅ | 部分索引 `idx_items_pending_embedding ON items(id) WHERE embedding IS NULL`（`rust/src/core/db/mod.rs` `open_db_connections` 幂等建立）+ EXPLAIN QUERY PLAN 回归测试（`embed.rs`） |
+| P-L3 | ✅ | `create_item`/`update_item` 包单事务（外层事务感知），移除 `update_item` 开头冗余 `get_item`（`rust/src/core/repo/items.rs`） |
+| P-L4 | ✅ | 备份快照改独立连接执行 checkpoint + `VACUUM INTO`，不再持全局锁（`rust/src/api/backup.rs` L45、`rust/src/core/backup/export.rs` `create_snapshot(db_path)`） |
+| P-L5 | ✅ | 搜索结果列表改 `CustomScrollView` + `SliverList.builder` 分段懒构建（`lib/src/pages/search_page.dart`） |
+| P-L6 | ✅ | 大图预览按屏幕宽度×DPR 传 `cacheWidth`（`lib/src/pages/photo_viewer_page.dart`） |
+| P-L7 | ✅ | 专用读连接 `READ_DB` + `with_read_conn`（与写连接同生命周期）+ `PRAGMA cache_size=-16384`（16MiB）；热读路径（search/repo/api）迁移涉及他线文件，取舍已在 `db/mod.rs` 注释注明，`with_conn` 仍为主路径（验收允许的部分落地形态） |
+| P-L8 | ✅ | `delete_unit` 按箱循环合并为单条 `DELETE ... IN (SELECT ...)`（`rust/src/core/repo/units.rs`） |
+
+**安全线（S-L1–L4、S-I1）— 全部 ✅**
+
+| 编号 | 状态 | 落地证据 |
+| --- | --- | --- |
+| S-L1 | ✅ | 恢复后旧数据副本移入 `db_dir/.old-data-{ts}` 隐藏目录（纳入云备份排除范围），保留最近一份供回滚（`rust/src/core/backup/restore.rs` L212/L425-451；测试已同步） |
+| S-L2 | ✅ | 恢复解压条目数上限 `max_entry_count` 默认 10 万，超限拒绝（`restore.rs` L51/L59/L121-125） |
+| S-L3 | ✅ | reqwest 0.12.4 → 0.12.26（`rust/Cargo.lock`）；`Cargo.toml` 增加 cargo audit/deny 与 gitleaks 门禁说明注释（L22-27） |
+| S-L4 | ✅ | `Db`/`Io`/`AiModelOutput` Display 对外脱敏，完整细节保留字段供 `{:?}` 调试（`rust/src/core/error.rs`）；Dart 侧 `friendlyErrorMessage` 只显通用提示（`lib/src/errors.dart`）；错误码枚举结构未变（FRB 兼容） |
+| S-I1 | ✅ | `MainActivity`（`android/app/src/main/kotlin/com/kurikana/findit/MainActivity.kt`，新路径）`window.addFlags(FLAG_SECURE)` 防截屏；应用锁注明为后续项 |
+
+**产品线（F1、F4、F8–F14、S-I2、乱码）— 全部 ✅**
+
+| 编号 | 状态 | 落地证据 |
+| --- | --- | --- |
+| F1 | ✅ | `app_links ^7.2.1`（pubspec.yaml）+ main.dart 冷/热启动深链路由（`getInitialLink` + `uriLinkStream` + 去重），外部 `findit://box/{slug}` 唤起直达收纳箱（`lib/main.dart` L66-112） |
+| F4 | ✅ | 物品页「分类管理」入口（`lib/src/pages/items_page.dart` L1076-1080）+ 设置页「数据管理」入口（`settings_page.dart` L445-455）双入口直达 CategoriesPage |
+| F8 | ✅ | 物品删除改 SnackBar 级撤销（乐观移除 → 5s 延迟删除 → 点「撤销」立即恢复，Completer 门控；`items_page.dart` L185-219）；整单元级联删除保留确认弹窗 |
+| F9 | ✅ | 卡片展示「登记于 … · 更新于 …」（`items_page.dart` L364-372） |
+| F10 | ✅ | 备份导出：取消分享时保留暂存文件并提示完整路径（`settings_page.dart` L205-207）；README 同步修订（README L70-72） |
+| F11 | ✅ | 品牌定制：5 密度 mipmap 图标、web/manifest.json（"Findit 家庭收纳档案"）、pubspec description 替换模板残留 |
+| F12 | ✅ | iOS 权限描述核验：`NSCameraUsageDescription`/`NSMicrophoneUsageDescription`/`NSPhotoLibraryUsageDescription` 均已完备（`ios/Runner/Info.plist` L70-74），无需处理 |
+| F13 | ✅ | AndroidManifest.xml 无 U+FFFD 乱码（UTF-8 核验通过）；`build.gradle.kts` namespace 与 applicationId/Kotlin 源码包统一为 `com.kurikana.findit`（旧路径 MainActivity.kt 已删除） |
+| F14 | ✅ | 自动备份提醒：超过 7 天未成功导出时设置页展示轻量提醒条（`settings_page.dart` L50-51/L216/L348） |
+| S-I2 | ✅ | 语音输入首次使用前弹隐私说明（语音由系统语音服务识别；`quick_add_page.dart` L67-77，一次性披露键） |
+| 乱码 | ✅ | categories_page.dart / backfill.dart / network_security_config.xml 逐字节 UTF-8 核验，均无 U+FFFD 替换字符，无需重写 |
+
+**剩余事项（非代码缺陷）**
+
+1. **release 构建**：需先创建 release keystore 并配置 `android/key.properties`（构建会 fail-fast 提示）；release APK 体积约 83.5MB（README）——属发布操作前置，非本次遗留代码项；
+2. **Dart 侧最终复核**：本遗留轮新增的 Dart 改动（main.dart 深链、search_page SliverList、photo_viewer cacheWidth、errors.dart 脱敏等）按 AGENTS.md 规范由**队长统一执行** `dart analyze` + 构建复核后交付；
+3. **真机验证建议**（§4.4 长期项）：性能基准、安全回执（`apksigner verify`/`cargo audit`）、发布前完整真机走查，仍建议发布前执行。
