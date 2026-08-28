@@ -1,11 +1,11 @@
 {
-    "name": "findit",
-    "short_name": "findit",
+    "name": "Findit 家庭收纳档案",
+    "short_name": "Findit",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F6F1E6",
+    "theme_color": "#2F5D50",
+    "description": "隐私优先的家庭收纳档案应用：数据存本地，支持二维码箱标签、AI 快速录入与智能搜索。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
