@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/backup.dart' as backup;
 import 'package:findit/src/rust/api/model.dart';
+import 'package:findit/src/rust/api/settings.dart' as settings_api;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -34,6 +35,38 @@ class _OpProgress {
 
 class _SettingsPageState extends State<SettingsPage> {
   bool _busy = false;
+
+  /// F14：距上次成功导出的天数；`null` 表示从未导出过。
+  int? _daysSinceLastBackup;
+
+  static const _kLastBackupAtKey = 'last_backup_at';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBackupReminder();
+  }
+
+  /// F14：读取「上次成功导出时间」，超过 7 天未导出则展示轻量提醒条。
+  Future<void> _loadBackupReminder() async {
+    try {
+      final stored = await settings_api.getSetting(key: _kLastBackupAtKey);
+      if (stored == null || stored.isEmpty) {
+        if (mounted) setState(() => _daysSinceLastBackup = null);
+        return;
+      }
+      final last = DateTime.tryParse(stored);
+      if (last == null) {
+        if (mounted) setState(() => _daysSinceLastBackup = null);
+        return;
+      }
+      final days = DateTime.now().difference(last).inDays;
+      if (mounted) setState(() => _daysSinceLastBackup = days);
+    } catch (_) {
+      // 读取失败不打扰用户，按无提醒处理。
+      if (mounted) setState(() => _daysSinceLastBackup = null);
+    }
+  }
 
   static const _exportStageLabels = {
     'snapshot': '正在生成数据库快照…',
@@ -169,22 +202,32 @@ class _SettingsPageState extends State<SettingsPage> {
 
       if (!mounted) return;
       // 通过系统分享面板移交文件路径，不把整个 zip 读入内存；
-      // 无论用户保存还是取消，都清理暂存文件避免无限堆积。
+      // 分享成功则清理暂存文件；用户取消分享时保留暂存文件并提示位置（F10），
+      // 避免「取消即丢失」的体验（README 已同步修订）。
       final result = await SharePlus.instance.share(
         ShareParams(files: [XFile(staging.path)]),
       );
-      try {
-        if (await staging.exists()) await staging.delete();
-      } catch (_) {}
       if (!mounted) return;
       final s = summary;
       if (result.status == ShareResultStatus.success) {
+        try {
+          if (await staging.exists()) await staging.delete();
+        } catch (_) {}
+        // F14：记录上次成功导出时间，用于下次进设置页时的备份提醒。
+        try {
+          await settings_api.setSetting(
+            key: _kLastBackupAtKey,
+            value: DateTime.now().toIso8601String(),
+          );
+        } catch (_) {}
+        if (mounted) setState(() => _daysSinceLastBackup = 0);
         _snack(s == null
             ? '备份已保存'
             : '备份已保存：${s.unitsCount} 个单元、${s.boxesCount} 个箱、'
                 '${s.itemsCount} 件物品、${s.photosCount} 张照片文件');
       } else {
-        _snack('备份未保存（已取消分享）');
+        // 取消分享：保留暂存文件，提示位置以便稍后手动处理。
+        _snack('备份已保留在应用备份目录，可稍后重新分享：\n${staging.path}');
       }
     } catch (e) {
       if (mounted) showErrorSnack(context, e);
@@ -302,6 +345,39 @@ class _SettingsPageState extends State<SettingsPage> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 48),
         children: [
+          // F14：自动备份提醒（轻量）：超过 7 天未成功导出时提示。
+          if (_daysSinceLastBackup case final int days? when days >= 7) ...[
+            Card(
+              color: palette.persimmon.withValues(alpha: 0.08),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(
+                  color: palette.persimmon.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.backup_outlined, color: palette.persimmon),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '距上次备份已超过 $days 天，'
+                        '建议尽快导出备份以防数据丢失。',
+                        style: const TextStyle(fontSize: 13, height: 1.5),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : _export,
+                      child: const Text('去备份'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           _sectionTitle('数据备份'),
           Card(
             child: Padding(

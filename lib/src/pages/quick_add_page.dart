@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:findit/src/rust/api/ai.dart' as ai;
 import 'package:findit/src/rust/api/model.dart';
 import 'package:findit/src/rust/api/search.dart' as search_api;
+import 'package:findit/src/rust/api/settings.dart' as settings_api;
 import 'package:findit/src/rust/core/ai/parse.dart';
 import 'package:findit/src/rust/core/error.dart';
 import 'package:speech_to_text/speech_recognition_result.dart';
@@ -62,6 +63,51 @@ class _QuickAddPageState extends State<QuickAddPage> {
   final SpeechToText _speech = SpeechToText();
   bool _listening = false;
   bool _speechReady = false;
+
+  /// S-I2：语音隐私披露提示的存储键（首次使用语音时弹一次说明）。
+  static const _kVoiceNoticeKey = 'voice_privacy_notice_shown';
+
+  /// S-I2：首次使用语音输入前弹隐私说明（语音由系统语音服务识别，
+  /// 识别过程由系统服务完成，内容可能离开本机）；确认后记档不再重复弹。
+  Future<bool> _ensureVoiceNoticeShown() async {
+    try {
+      final shown = await settings_api.getSetting(key: _kVoiceNoticeKey);
+      if (shown == '1' || shown == 'true') return true;
+    } catch (_) {
+      // 读设置失败按未披露处理，弹窗说明。
+    }
+    if (!mounted) return false;
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('语音输入说明'),
+        content: const Text(
+          '语音输入由系统语音服务识别（如 Android 系统语音识别）。'
+          '识别过程由系统服务完成，语音内容可能会被发送到系统语音服务'
+          '（可能包含第三方服务）进行识别。\n\n'
+          '建议避免朗读敏感信息；确认后开始识别。',
+          style: TextStyle(height: 1.6),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('知道了'),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true) return false;
+    try {
+      await settings_api.setSetting(key: _kVoiceNoticeKey, value: '1');
+    } catch (_) {
+      // 记档失败不影响本次使用。
+    }
+    return true;
+  }
 
   @override
   void initState() {
@@ -263,12 +309,16 @@ class _QuickAddPageState extends State<QuickAddPage> {
 
   /// 切换语音识别：中文（zh_CN）优先，失败回退系统默认语言；
   /// 识别不可用（无权限/不支持）时提示但不影响文本输入。
+  /// 首次使用前弹隐私说明（S-I2）。
   Future<void> _toggleSpeech() async {
     if (_listening) {
       await _speech.stop();
       if (mounted) setState(() => _listening = false);
       return;
     }
+    // S-I2：首次使用语音前披露「语音由系统语音服务识别」。
+    if (!await _ensureVoiceNoticeShown()) return;
+    if (!mounted) return;
     if (!_speechReady) {
       bool ok = false;
       try {

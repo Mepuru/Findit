@@ -1,5 +1,5 @@
 name: findit
-description: "A new Flutter project."
+description: "隐私优先的家庭收纳档案应用：本地 SQLite + 嵌入式 Rust 核心，支持二维码标签、AI 快速录入与智能搜索。"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -48,6 +48,8 @@ dependencies:
   file_picker: ^12.0.0
   # 语音输入（快速录入页麦克风识别）。
   speech_to_text: ^7.0.0
+  # F1：外部深链直达（findit://box/{slug} 扫码唤起后跳转对应收纳箱）。
+  app_links: ^7.2.1
 
 dev_dependencies:
   flutter_test:

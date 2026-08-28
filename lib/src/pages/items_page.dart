@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import '../theme.dart';
 import '../widgets/backfill.dart';
 import '../widgets/box_qr_sheet.dart';
 import '../widgets/common.dart';
+import 'categories_page.dart';
 import 'photo_viewer_page.dart';
 
 /// 第三级：某个收纳箱内的物品列表。
@@ -180,18 +182,56 @@ class _ItemsPageState extends State<ItemsPage> {
     );
   }
 
+  /// F8：物品删除改为「SnackBar 级撤销（延迟删除）」：
+  /// 先乐观移除并弹出撤销条，超时未撤销才真正删除；
+  /// 点「撤销」立即恢复（重新加载列表）。
+  /// 整单元级联删除（units_page/boxes_page）仍保留确认弹窗，不做撤销。
   Future<void> _delete(Item item) async {
-    final confirmed = await confirmDelete(
-      context,
-      title: '删除「${item.name}」？',
-      message: '该物品将从档案中移除，且无法恢复。',
+    final items = _items;
+    if (items == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    setState(() {
+      _items = items.where((i) => i.id != item.id).toList();
+    });
+
+    // 5 秒内可撤销；超时后真正删除。
+    // 用 Completer 而非「等待后检查」：用户点撤销立即完成；否则 5s 后完成，
+    // 即使期间页面已退出（mounted=false）也照常执行删除，避免物品复活。
+    final undoGate = Completer<bool>();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text('已删除「${item.name}」'),
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: '撤销',
+          onPressed: () {
+            if (!undoGate.isCompleted) undoGate.complete(true);
+          },
+        ),
+      ),
     );
-    if (!confirmed) return;
+    Timer(const Duration(seconds: 5), () {
+      if (!undoGate.isCompleted) undoGate.complete(false);
+    });
+    final undone = await undoGate.future;
+    if (undone) {
+      // 撤销：物品尚未真正删除，重新加载即恢复原状。
+      if (mounted) await _reload();
+      return;
+    }
     try {
       await api.deleteItem(id: item.id);
-      await _reload();
+      if (!mounted) return;
+      setState(() {
+        _photoPaths.remove(item.id);
+        _itemKeys.remove(item.id);
+      });
     } catch (e) {
-      if (mounted) showErrorSnack(context, e);
+      if (mounted) {
+        showErrorSnack(context, e);
+        await _reload();
+      }
     }
   }
 
@@ -313,6 +353,25 @@ class _ItemCard extends StatelessWidget {
   /// 搜索结果直达定位的高亮标记（卡片描边 + 底色提亮）。
   final bool highlighted;
 
+  /// F9：把 ISO 8601 UTC 时间转成本地「MM-dd HH:mm」紧凑格式。
+  static String _fmtTime(String iso) {
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '';
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(dt.month)}-${two(dt.day)} ${two(dt.hour)}:${two(dt.minute)}';
+  }
+
+  /// F9：登记/更新时间标签；更新晚于登记时两者都展示，否则只展示登记时间。
+  String _itemTimeLabel(Item item) {
+    final created = _fmtTime(item.createdAt);
+    final updated = _fmtTime(item.updatedAt);
+    if (updated.isEmpty) return '登记于 $created';
+    if (created == updated || item.updatedAt == item.createdAt) {
+      return '登记于 $created';
+    }
+    return '登记于 $created · 更新于 $updated';
+  }
+
   Widget _tagIcon(BuildContext context) => Container(
         width: 42,
         height: 42,
@@ -424,6 +483,14 @@ class _ItemCard extends StatelessWidget {
                             ),
                         ],
                       ),
+                    // F9：登记/更新时间（model 已有 createdAt/updatedAt，ISO UTC）。
+                    const SizedBox(height: 4),
+                    Text(
+                      _itemTimeLabel(item),
+                      style: Theme.of(context).textTheme.labelSmall!.copyWith(
+                            color: palette.inkSoft.withValues(alpha: 0.85),
+                          ),
+                    ),
                   ],
                 ),
               ),
@@ -999,9 +1066,24 @@ class _ItemFormSheetState extends State<_ItemFormSheet> {
                 },
               ),
             const SizedBox(height: 18),
-            Text(
-              '分类（可多选）',
-              style: Theme.of(context).textTheme.titleSmall,
+            Row(
+              children: [
+                Text(
+                  '分类（可多选）',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const Spacer(),
+                // F4：分类管理入口（重命名/删除），与设置页「数据管理」入口互补。
+                TextButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const CategoriesPage(),
+                    ),
+                  ),
+                  icon: const Icon(Icons.label_outline_rounded, size: 16),
+                  label: const Text('管理分类'),
+                ),
+              ],
             ),
             const SizedBox(height: 8),
             if (_categoriesError != null)
